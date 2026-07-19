@@ -171,169 +171,6 @@ const AREAS = [
     ]
   },
   {
-    id: "squat",
-    name: "Squats",
-    icon: "&#x1F9B5;",
-    tagline: "Legs and hips — the foundation of total-body power.",
-    steps: [
-      {
-        name: "Shoulderstand Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 10" },
-          { label: "Intermediate", target: "2 sets of 25" },
-          { label: "Progression", target: "3 sets of 50" }
-        ],
-        how: [
-          "Lie on your back and kick up into a shoulderstand, hands supporting your lower back, weight on shoulders and upper arms — never on the neck.",
-          "Keeping the torso upright, bend at hips and knees until your knees touch your forehead.",
-          "Extend the legs straight back up to the locked position and repeat."
-        ],
-        why: "The squat movement with almost no load through knees or lower back — the perfect starting point and a great rehab drill.",
-        easier: "If your knees can't reach your forehead yet, go as deep as you comfortably can and add depth each workout."
-      },
-      {
-        name: "Jackknife Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 10" },
-          { label: "Intermediate", target: "2 sets of 20" },
-          { label: "Progression", target: "3 sets of 40" }
-        ],
-        how: [
-          "Stand in front of a sturdy knee-high object (chair seat, low table). Hinge at the hips and place your palms on it, tilting forward so your arms carry part of your weight.",
-          "Feet shoulder width, torso staying roughly parallel to the floor, squat down until your hamstrings meet your calves.",
-          "Push back up with legs and arms together. Heels stay flat the whole time."
-        ],
-        why: "About half as hard as a normal squat: it builds full-depth mobility and prepares knees and Achilles tendons for what's coming.",
-        easier: "Add squat depth an inch at a time, or lean more weight on your arms and gradually shift the work back to the legs."
-      },
-      {
-        name: "Supported Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 10" },
-          { label: "Intermediate", target: "2 sets of 15" },
-          { label: "Progression", target: "3 sets of 30" }
-        ],
-        how: [
-          "Stand upright holding a sturdy object (desk edge, chair back) with straight-ish arms angled down, feet shoulder width.",
-          "Squat all the way down — back straight, heels flat — until your hamstrings rest on your calves.",
-          "Stand back up mostly with leg power, pulling lightly with the arms to help, especially out of the bottom."
-        ],
-        why: "The link between arm-assisted and free squatting: full depth, with just enough help where you need it.",
-        easier: "Simply pull harder with the arms when needed, and use less arm help every session as the legs take over."
-      },
-      {
-        name: "Half Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 8" },
-          { label: "Intermediate", target: "2 sets of 35" },
-          { label: "Progression", target: "2 sets of 50" }
-        ],
-        how: [
-          "Stand free, feet shoulder width or a little wider, toes pointing slightly out, hands wherever comfortable.",
-          "Squat until your thighs are parallel to the floor (knees at about ninety degrees).",
-          "Pause dead at the bottom — no bouncing — then stand under full control. Back straight, heels down, knees tracking over the toes."
-        ],
-        why: "Your first unassisted squat: it teaches balance and the knee and foot positions that suit your build.",
-        easier: "Start with quarter squats and add an inch of depth whenever you can."
-      },
-      {
-        name: "Full Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 5" },
-          { label: "Intermediate", target: "2 sets of 10" },
-          { label: "Progression", target: "2 sets of 30" }
-        ],
-        how: [
-          "Same stance as half squats. Squat down keeping the back straight; as your thighs pass parallel, sit back as if lowering into a chair.",
-          "Descend under control until the backs of your thighs rest on your calves.",
-          "Pause, then drive back up with leg strength alone — no bounce, heels flat, knees never caving inward."
-        ],
-        why: "The classic bodyweight leg builder: thighs, glutes, hips, calves and even the feet all get stronger.",
-        easier: "Return to half squats and add an inch of depth as you get stronger. Expect the very bottom to be the hard part."
-      },
-      {
-        name: "Close Squats",
-        standards: [
-          { label: "Beginner", target: "1 set of 5" },
-          { label: "Intermediate", target: "2 sets of 10" },
-          { label: "Progression", target: "2 sets of 20" }
-        ],
-        how: [
-          "Stand with your heels together, toes angled slightly out, arms straight out in front of your chest as a counterbalance.",
-          "Squat to full depth until your chest presses into your thighs.",
-          "Flex the shins and pull the toes up to avoid tipping backwards; stand back up with leg power only, heels down."
-        ],
-        why: "Full squats with the quadriceps turned up to maximum — and a serious balance challenge.",
-        easier: "From full squats, bring the feet an inch closer together every workout. If you tip backwards, the shin muscles just need time to catch up."
-      },
-      {
-        name: "Uneven Squats",
-        perSide: true,
-        standards: [
-          { label: "Beginner", target: "1 set of 5 (each side)" },
-          { label: "Intermediate", target: "2 sets of 10 (each side)" },
-          { label: "Progression", target: "2 sets of 20 (each side)" }
-        ],
-        how: [
-          "One foot flat on the floor, the other resting on a basketball about one foot-length ahead, feet roughly shoulder width apart, arms out front.",
-          "Squat until the hamstring of your floor leg touches its calf; the ball leg helps only a little.",
-          "Push back up with both legs, but let the floor leg do the real work. Keep clear space behind you in case you tip."
-        ],
-        why: "The first big step toward one-leg strength: the raised leg can't contribute much, so the grounded leg learns to carry you.",
-        easier: "Swap the wobbly ball for three stacked flat bricks; or start with one brick and build up the height."
-      },
-      {
-        name: "½ One-Leg Squats",
-        perSide: true,
-        standards: [
-          { label: "Beginner", target: "1 set of 5 (each side)" },
-          { label: "Intermediate", target: "2 sets of 10 (each side)" },
-          { label: "Progression", target: "2 sets of 20 (each side)" }
-        ],
-        how: [
-          "Stand on one leg with the other leg held straight out in front, foot around thigh height, arms out in front of your chest.",
-          "Squat on the standing leg until the knee reaches about ninety degrees (thigh parallel to the floor).",
-          "Pause under tension, then drive back up on that single leg. Back flat, heel down."
-        ],
-        why: "Your first true one-leg squat: it builds the balance, and the hip strength to hold the free leg up.",
-        easier: "Shorten the range of motion and add depth gradually over time."
-      },
-      {
-        name: "Assisted One-Leg Squats",
-        perSide: true,
-        standards: [
-          { label: "Beginner", target: "1 set of 5 (each side)" },
-          { label: "Intermediate", target: "2 sets of 10 (each side)" },
-          { label: "Progression", target: "2 sets of 20 (each side)" }
-        ],
-        how: [
-          "Place a basketball beside the working leg. Stand on that leg with the other held out front, as in the previous step.",
-          "Squat all the way down until the hamstring rests on the calf, placing your hand on the ball at the bottom.",
-          "Stand up mostly with leg strength, pressing down on the ball only to get through the first few inches."
-        ],
-        why: "The bottom inches of a one-leg squat are the hardest in all of squatting — this step lets your arm spot you exactly there.",
-        easier: "Press off something higher than the ball (a chair seat, a low table), then work down to progressively smaller objects."
-      },
-      {
-        name: "One-Leg Squats",
-        master: true,
-        perSide: true,
-        standards: [
-          { label: "Beginner", target: "1 set of 5 (each side)" },
-          { label: "Intermediate", target: "2 sets of 10 (each side)" },
-          { label: "Elite", target: "2 sets of 50 (each side)" }
-        ],
-        how: [
-          "Stand tall, raise one leg straight out until the foot is around hip level, arms out in front of your chest.",
-          "Lower yourself smoothly on the standing leg — never just drop — until the hamstring compresses fully against the calf.",
-          "Pause for a one-count under tension, then stand back up with pure leg strength. No momentum, back straight, heel flat."
-        ],
-        why: "The tenth and final step: the ultimate lower-body exercise, building legs that are as functional as they look.",
-        easier: "Go back to assisted one-leg squats with a smaller object (like stacked bricks) and shrink it until you need no help at all."
-      }
-    ]
-  },
-  {
     id: "pullup",
     name: "Pullups",
     icon: "&#x1F9D7;",
@@ -652,6 +489,169 @@ const AREAS = [
         ],
         why: "The tenth and final step: the greatest all-round midsection exercise in existence, done strictly.",
         easier: "Own Step 9 first, then simply add downward depth a fraction of an inch at a time."
+      }
+    ]
+  },
+  {
+    id: "squat",
+    name: "Squats",
+    icon: "&#x1F9B5;",
+    tagline: "Legs and hips — the foundation of total-body power.",
+    steps: [
+      {
+        name: "Shoulderstand Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 10" },
+          { label: "Intermediate", target: "2 sets of 25" },
+          { label: "Progression", target: "3 sets of 50" }
+        ],
+        how: [
+          "Lie on your back and kick up into a shoulderstand, hands supporting your lower back, weight on shoulders and upper arms — never on the neck.",
+          "Keeping the torso upright, bend at hips and knees until your knees touch your forehead.",
+          "Extend the legs straight back up to the locked position and repeat."
+        ],
+        why: "The squat movement with almost no load through knees or lower back — the perfect starting point and a great rehab drill.",
+        easier: "If your knees can't reach your forehead yet, go as deep as you comfortably can and add depth each workout."
+      },
+      {
+        name: "Jackknife Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 10" },
+          { label: "Intermediate", target: "2 sets of 20" },
+          { label: "Progression", target: "3 sets of 40" }
+        ],
+        how: [
+          "Stand in front of a sturdy knee-high object (chair seat, low table). Hinge at the hips and place your palms on it, tilting forward so your arms carry part of your weight.",
+          "Feet shoulder width, torso staying roughly parallel to the floor, squat down until your hamstrings meet your calves.",
+          "Push back up with legs and arms together. Heels stay flat the whole time."
+        ],
+        why: "About half as hard as a normal squat: it builds full-depth mobility and prepares knees and Achilles tendons for what's coming.",
+        easier: "Add squat depth an inch at a time, or lean more weight on your arms and gradually shift the work back to the legs."
+      },
+      {
+        name: "Supported Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 10" },
+          { label: "Intermediate", target: "2 sets of 15" },
+          { label: "Progression", target: "3 sets of 30" }
+        ],
+        how: [
+          "Stand upright holding a sturdy object (desk edge, chair back) with straight-ish arms angled down, feet shoulder width.",
+          "Squat all the way down — back straight, heels flat — until your hamstrings rest on your calves.",
+          "Stand back up mostly with leg power, pulling lightly with the arms to help, especially out of the bottom."
+        ],
+        why: "The link between arm-assisted and free squatting: full depth, with just enough help where you need it.",
+        easier: "Simply pull harder with the arms when needed, and use less arm help every session as the legs take over."
+      },
+      {
+        name: "Half Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 8" },
+          { label: "Intermediate", target: "2 sets of 35" },
+          { label: "Progression", target: "2 sets of 50" }
+        ],
+        how: [
+          "Stand free, feet shoulder width or a little wider, toes pointing slightly out, hands wherever comfortable.",
+          "Squat until your thighs are parallel to the floor (knees at about ninety degrees).",
+          "Pause dead at the bottom — no bouncing — then stand under full control. Back straight, heels down, knees tracking over the toes."
+        ],
+        why: "Your first unassisted squat: it teaches balance and the knee and foot positions that suit your build.",
+        easier: "Start with quarter squats and add an inch of depth whenever you can."
+      },
+      {
+        name: "Full Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 5" },
+          { label: "Intermediate", target: "2 sets of 10" },
+          { label: "Progression", target: "2 sets of 30" }
+        ],
+        how: [
+          "Same stance as half squats. Squat down keeping the back straight; as your thighs pass parallel, sit back as if lowering into a chair.",
+          "Descend under control until the backs of your thighs rest on your calves.",
+          "Pause, then drive back up with leg strength alone — no bounce, heels flat, knees never caving inward."
+        ],
+        why: "The classic bodyweight leg builder: thighs, glutes, hips, calves and even the feet all get stronger.",
+        easier: "Return to half squats and add an inch of depth as you get stronger. Expect the very bottom to be the hard part."
+      },
+      {
+        name: "Close Squats",
+        standards: [
+          { label: "Beginner", target: "1 set of 5" },
+          { label: "Intermediate", target: "2 sets of 10" },
+          { label: "Progression", target: "2 sets of 20" }
+        ],
+        how: [
+          "Stand with your heels together, toes angled slightly out, arms straight out in front of your chest as a counterbalance.",
+          "Squat to full depth until your chest presses into your thighs.",
+          "Flex the shins and pull the toes up to avoid tipping backwards; stand back up with leg power only, heels down."
+        ],
+        why: "Full squats with the quadriceps turned up to maximum — and a serious balance challenge.",
+        easier: "From full squats, bring the feet an inch closer together every workout. If you tip backwards, the shin muscles just need time to catch up."
+      },
+      {
+        name: "Uneven Squats",
+        perSide: true,
+        standards: [
+          { label: "Beginner", target: "1 set of 5 (each side)" },
+          { label: "Intermediate", target: "2 sets of 10 (each side)" },
+          { label: "Progression", target: "2 sets of 20 (each side)" }
+        ],
+        how: [
+          "One foot flat on the floor, the other resting on a basketball about one foot-length ahead, feet roughly shoulder width apart, arms out front.",
+          "Squat until the hamstring of your floor leg touches its calf; the ball leg helps only a little.",
+          "Push back up with both legs, but let the floor leg do the real work. Keep clear space behind you in case you tip."
+        ],
+        why: "The first big step toward one-leg strength: the raised leg can't contribute much, so the grounded leg learns to carry you.",
+        easier: "Swap the wobbly ball for three stacked flat bricks; or start with one brick and build up the height."
+      },
+      {
+        name: "½ One-Leg Squats",
+        perSide: true,
+        standards: [
+          { label: "Beginner", target: "1 set of 5 (each side)" },
+          { label: "Intermediate", target: "2 sets of 10 (each side)" },
+          { label: "Progression", target: "2 sets of 20 (each side)" }
+        ],
+        how: [
+          "Stand on one leg with the other leg held straight out in front, foot around thigh height, arms out in front of your chest.",
+          "Squat on the standing leg until the knee reaches about ninety degrees (thigh parallel to the floor).",
+          "Pause under tension, then drive back up on that single leg. Back flat, heel down."
+        ],
+        why: "Your first true one-leg squat: it builds the balance, and the hip strength to hold the free leg up.",
+        easier: "Shorten the range of motion and add depth gradually over time."
+      },
+      {
+        name: "Assisted One-Leg Squats",
+        perSide: true,
+        standards: [
+          { label: "Beginner", target: "1 set of 5 (each side)" },
+          { label: "Intermediate", target: "2 sets of 10 (each side)" },
+          { label: "Progression", target: "2 sets of 20 (each side)" }
+        ],
+        how: [
+          "Place a basketball beside the working leg. Stand on that leg with the other held out front, as in the previous step.",
+          "Squat all the way down until the hamstring rests on the calf, placing your hand on the ball at the bottom.",
+          "Stand up mostly with leg strength, pressing down on the ball only to get through the first few inches."
+        ],
+        why: "The bottom inches of a one-leg squat are the hardest in all of squatting — this step lets your arm spot you exactly there.",
+        easier: "Press off something higher than the ball (a chair seat, a low table), then work down to progressively smaller objects."
+      },
+      {
+        name: "One-Leg Squats",
+        master: true,
+        perSide: true,
+        standards: [
+          { label: "Beginner", target: "1 set of 5 (each side)" },
+          { label: "Intermediate", target: "2 sets of 10 (each side)" },
+          { label: "Elite", target: "2 sets of 50 (each side)" }
+        ],
+        how: [
+          "Stand tall, raise one leg straight out until the foot is around hip level, arms out in front of your chest.",
+          "Lower yourself smoothly on the standing leg — never just drop — until the hamstring compresses fully against the calf.",
+          "Pause for a one-count under tension, then stand back up with pure leg strength. No momentum, back straight, heel flat."
+        ],
+        why: "The tenth and final step: the ultimate lower-body exercise, building legs that are as functional as they look.",
+        easier: "Go back to assisted one-leg squats with a smaller object (like stacked bricks) and shrink it until you need no help at all."
       }
     ]
   },

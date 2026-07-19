@@ -19,6 +19,19 @@
   var STORE_KEY = "bigsix.v1";
   var SVGNS = "http://www.w3.org/2000/svg";
 
+  // Backup links encode progress as an ordered list. This order is FROZEN to
+  // the original v1 payload layout so that old backup links import correctly,
+  // no matter how the areas are displayed on screen.
+  var PAYLOAD_ORDER = ["pushup", "squat", "pullup", "legraise", "bridge", "hspu"];
+
+  // Display order of the area cards (pairs: row 1, row 2, row 3).
+  var CARD_ORDER = ["pushup", "pullup", "hspu", "bridge", "legraise", "squat"];
+
+  function areaIndexById(id) {
+    for (var i = 0; i < AREAS.length; i++) if (AREAS[i].id === id) return i;
+    return -1;
+  }
+
   /* ---------- State ---------- */
 
   var memoryFallback = null;
@@ -294,7 +307,9 @@
 
   function renderCards() {
     var host = $("#cards");
-    var html = AREAS.map(function (a, i) {
+    var html = CARD_ORDER.map(function (id) {
+      var i = areaIndexById(id);
+      var a = AREAS[i];
       var st = state.areas[a.id];
       var step = a.steps[st.step - 1];
       var v = areaValue(a.id);
@@ -604,7 +619,7 @@
   /* ---------- Share / import ---------- */
 
   function shareURL() {
-    var p = AREAS.map(function (a) { return [state.areas[a.id].step, state.areas[a.id].std]; });
+    var p = PAYLOAD_ORDER.map(function (id) { return [state.areas[id].step, state.areas[id].std]; });
     var payload = btoa(JSON.stringify({ v: 1, p: p }));
     return location.origin + location.pathname + "#s=" + payload;
   }
@@ -617,13 +632,13 @@
     if (!s) return null;
     try {
       var data = JSON.parse(atob(s));
-      if (!data || data.v !== 1 || !Array.isArray(data.p) || data.p.length !== AREAS.length) return null;
+      if (!data || data.v !== 1 || !Array.isArray(data.p) || data.p.length !== PAYLOAD_ORDER.length) return null;
       var incoming = defaultState();
-      AREAS.forEach(function (a, i) {
+      PAYLOAD_ORDER.forEach(function (id, i) {
         var pair = data.p[i] || [];
         var step = Math.round(Number(pair[0])), std = Math.round(Number(pair[1]));
-        if (step >= 1 && step <= 10) incoming.areas[a.id].step = step;
-        if (std >= 0 && std <= 3) incoming.areas[a.id].std = std;
+        if (step >= 1 && step <= 10) incoming.areas[id].step = step;
+        if (std >= 0 && std <= 3) incoming.areas[id].std = std;
       });
       return incoming;
     } catch (e) { return null; }

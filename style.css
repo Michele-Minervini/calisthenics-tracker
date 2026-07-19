@@ -178,6 +178,10 @@ main.layout {
 }
 
 #radar .wedge { fill: transparent; cursor: pointer; outline-offset: -2px; }
+/* Focus rings are for keyboard navigation — don't leave them behind after taps */
+#radar .wedge:focus:not(:focus-visible),
+#radar .dothit:focus:not(:focus-visible),
+#radar .axis-label:focus:not(:focus-visible) { outline: none; }
 @media (hover: hover) {
   #radar .wedge:hover { fill: var(--ink); fill-opacity: 0.04; }
 }
@@ -220,8 +224,11 @@ main.layout {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+@media (max-width: 480px) {
+  .cards { grid-template-columns: 1fr; }
 }
 
 .card {
