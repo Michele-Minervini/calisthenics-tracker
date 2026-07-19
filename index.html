@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Big Six Tracker</title>
+  <meta name="description" content="Track your progress through the six fundamental bodyweight movements, ten steps each.">
+  <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Big Six">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="app">
+      <div class="title">
+        <h1>Big Six Tracker</h1>
+        <p>Six fundamental movements, ten steps each — one step at a time</p>
+      </div>
+      <button class="iconbtn" id="settingsBtn" aria-label="Settings and backup" title="Settings &amp; backup">&#9881;&#65039;</button>
+    </header>
+
+    <main class="layout">
+      <section class="radar-panel" aria-label="Progress radar">
+        <svg id="radar" viewBox="0 0 420 400" role="group" aria-label="Radar chart of your current step in each of the six movement areas"></svg>
+        <p class="radar-hint" id="radarHint">Tap an area — on the chart or the cards — to see its ten steps and set where you are.</p>
+      </section>
+
+      <section aria-label="Movement areas">
+        <div class="cards" id="cards"></div>
+      </section>
+    </main>
+
+    <footer class="app">
+      <p>Your progress is stored only on this device. Use Settings &#8594; backup link to move it to another device.</p>
+    </footer>
+  </div>
+
+  <div id="scrim"></div>
+  <div id="sheet" role="dialog" aria-modal="true" hidden></div>
+  <div id="tooltip" role="presentation"></div>
+  <div id="toast" role="status"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

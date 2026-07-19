@@ -1,0 +1,12 @@
+# Personal files — never published
+*.epub
+*.pdf
+*.mobi
+private/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local tooling
+.claude/
