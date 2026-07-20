@@ -72,24 +72,41 @@
     };
   }
 
+  // True when stored data existed but could not be read/understood. We then
+  // avoid auto-writing over it, so a recoverable file isn't destroyed on load.
+  var loadFailed = false;
+
   function loadState() {
+    var raw = null;
     try {
-      var raw = localStorage.getItem(STORE_KEY);
-      if (!raw) return defaultState();
-      var parsed = JSON.parse(raw);
-      return sanitizeState(parsed) || defaultState();
+      raw = localStorage.getItem(STORE_KEY);
     } catch (e) {
+      // Storage itself is unavailable (blocked/disabled) — distinct from bad data.
       storageOk = false;
       return memoryFallback || defaultState();
     }
+    if (!raw) return defaultState();
+    try {
+      var clean = sanitizeState(JSON.parse(raw));
+      if (!clean) { loadFailed = true; return defaultState(); }
+      return clean;
+    } catch (e) {
+      loadFailed = true;
+      return defaultState();
+    }
   }
 
+  // Returns true when the write actually landed. (User-initiated saves always
+  // proceed; only the automatic boot-time write is suppressed after a bad load.)
   function saveState() {
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
+      storageOk = true;
+      return true;
     } catch (e) {
       storageOk = false;
       memoryFallback = state;
+      return false;
     }
   }
 
@@ -238,14 +255,34 @@
     var d = new Date(ts);
     return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
   }
+
+  /* Calendar-day arithmetic. Never step days by adding 86400000 ms: across a
+     daylight-saving change consecutive local midnights are 23h or 25h apart,
+     which silently drops or duplicates a day. setDate() moves whole calendar
+     days regardless of clock changes. */
+  function startOfDay(ts) {
+    var d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  function addDays(date, n) {
+    var d = new Date(date.getTime());
+    d.setDate(d.getDate() + n);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+  // Whole calendar days between two local midnights (rounding absorbs 23h/25h days).
+  function dayDelta(fromTs, toTs) {
+    return Math.round((startOfDay(toTs).getTime() - startOfDay(fromTs).getTime()) / 86400000);
+  }
   function genId() {
     return "s" + nowMs().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
   }
   function prettyDate(ts) {
     var dd = dateStr(ts);
-    var today = nowMs();
-    if (dd === dateStr(today)) return "Today";
-    if (dd === dateStr(today - 86400000)) return "Yesterday";
+    var today = startOfDay(nowMs());
+    if (dd === dateStr(today.getTime())) return "Today";
+    if (dd === dateStr(addDays(today, -1).getTime())) return "Yesterday";
     try {
       return new Date(ts).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
     } catch (e) { return dd; }
@@ -368,7 +405,14 @@
     var old = state.areas[areaId];
     var oldStep = old.step;
     state.areas[areaId] = { step: newStep, std: newStd };
-    if (newStep > oldStep) recordMilestone("advance", areaId, newStep);
+    if (newStep > oldStep) {
+      // Don't re-record a step already in the timeline (e.g. stepping back down
+      // with "set as my current step" and then climbing again).
+      var already = state.milestones.some(function (m) {
+        return m.type === "advance" && m.areaId === areaId && m.step === newStep;
+      });
+      if (!already) recordMilestone("advance", areaId, newStep);
+    }
     checkMaster(areaId);
     saveState();
     recordSnapshot();
@@ -383,21 +427,23 @@
   }
   function currentStreak() {
     var days = trainingDaySet();
-    var d = new Date();
+    var d = startOfDay(nowMs());
     // Today not trained yet shouldn't break a streak — count from yesterday.
-    if (!days[dateStr(d.getTime())]) d = new Date(d.getTime() - 86400000);
+    if (!days[dateStr(d.getTime())]) d = addDays(d, -1);
     var streak = 0;
-    while (days[dateStr(d.getTime())]) { streak++; d = new Date(d.getTime() - 86400000); }
+    while (days[dateStr(d.getTime())]) { streak++; d = addDays(d, -1); }
     return streak;
   }
   function longestStreak() {
     var days = Object.keys(trainingDaySet()).sort();
     var best = 0, run = 0, prev = null;
     days.forEach(function (k) {
-      if (prev !== null && (dateFromKey(k) - prev) === 86400000) run++;
+      var cur = dateFromKey(k);
+      // Round the delta: a DST day is 23h or 25h, still one calendar day apart.
+      if (prev !== null && Math.round((cur - prev) / 86400000) === 1) run++;
       else run = 1;
       if (run > best) best = run;
-      prev = dateFromKey(k);
+      prev = cur;
     });
     return best;
   }
@@ -411,13 +457,14 @@
   function smartNudge() {
     if (!state.log.length) return "";
     var today = nowMs();
-    var worst = null, worstGap = -1;
+    var worst = null, worstGap = -1, worstNever = false;
     AREAS.forEach(function (a) {
       var last = lastSessionTs(a.id);
-      var gap = last ? Math.floor((today - last) / 86400000) : 9999;
-      if (gap > worstGap) { worstGap = gap; worst = a; }
+      // Whole calendar days, so this agrees with the streaks and the heatmap.
+      var gap = last ? Math.max(0, dayDelta(last, today)) : Infinity;
+      if (gap > worstGap) { worstGap = gap; worst = a; worstNever = !last; }
     });
-    if (worst && worstGap >= 900) return "You haven't logged " + shortAreaName(worst) + " yet — give it a try.";
+    if (worst && worstNever) return "You haven't logged " + shortAreaName(worst) + " yet — give it a try.";
     if (worst && worstGap >= 5) return "You haven't trained " + shortAreaName(worst) + " in " + worstGap + " days.";
     var st = currentStreak();
     if (st >= 2) return "🔥 " + st + "-day streak — keep it going!";
@@ -503,11 +550,12 @@
 
   /* ---------- QR code for the backup link ---------- */
 
+  // Returns true when a QR was actually drawn.
   function renderQR(container) {
     container.innerHTML = "";
-    if (typeof QR === "undefined") { container.textContent = "QR generator unavailable."; return; }
+    if (typeof QR === "undefined") { container.textContent = "QR generator unavailable."; return false; }
     var m = QR.generate(shareURL());
-    if (!m) { container.textContent = "Link is too long for a QR code."; return; }
+    if (!m) { container.textContent = "Link is too long for a QR code."; return false; }
     var n = m.length, quiet = 4, scale = 6, px = (n + quiet * 2) * scale;
     var canvas = document.createElement("canvas");
     canvas.width = px; canvas.height = px;
@@ -524,6 +572,7 @@
     cap.className = "qrcap";
     cap.textContent = "Scan with the other device's camera to open your progress.";
     container.appendChild(cap);
+    return true;
   }
 
   /* ---------- Radar ---------- */
@@ -759,9 +808,23 @@
 
   /* ---------- Today card + smart nudge (home) ---------- */
 
+  // The Today card depends on "what did I train today", so it goes stale if the
+  // app is left open past midnight (common for an installed home-screen app).
+  var renderedDay = null;
+
+  function refreshIfDayChanged() {
+    var k = dateStr(nowMs());
+    if (renderedDay && k !== renderedDay) refresh();
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) refreshIfDayChanged();
+  });
+  window.addEventListener("focus", refreshIfDayChanged);
+
   function renderToday() {
     var host = $("#today");
     if (!host) return;
+    renderedDay = dateStr(nowMs());
     var parts = [];
 
     if (state.routine.enabled) {
@@ -881,11 +944,12 @@
     if (logDraft.editId) {
       var target = null;
       state.log.forEach(function (x) { if (x.id === logDraft.editId) target = x; });
-      if (target) { target.sets = sets; target.note = logDraft.note; saveState(); }
+      var savedOk = true;
+      if (target) { target.sets = sets; target.note = logDraft.note; savedOk = saveState(); }
       logDraft = { key: "", sets: [], note: "", editId: null };
       refresh();
       goBack();
-      toast("Session updated ✓");
+      toast(savedOk ? "Session updated ✓" : "Updated in this tab only — storage is full or blocked");
       return;
     }
 
@@ -905,10 +969,11 @@
         msg = (det === 3 && n < 10) ? (label + " standard met — ready to move up!") : (label + " standard met!");
       }
     }
-    logDraft = { key: "", sets: [], note: "" };
+    logDraft = { key: "", sets: [], note: "", editId: null };
     refresh();
     goBack(); // back to the step detail, which now reflects any new standard
-    toast(msg);
+    // Don't claim success if the write never landed.
+    toast(storageOk ? msg : "Saved in this tab only — storage is full or blocked");
   }
 
   function goBack() {
@@ -1143,7 +1208,9 @@
           var a = AREAS[areaIndexById(e.areaId)];
           var step = a.steps[e.step - 1];
           return '<div class="hitem" style="--area:' + areaColorVar(a) + '">' +
-            '<button class="hopen" data-id="' + esc(e.id) + '" aria-label="Edit this session">' +
+            // No aria-label here: it would mask the exercise/sets text inside,
+            // which is exactly what a screen-reader user needs to hear.
+            '<button class="hopen" data-id="' + esc(e.id) + '">' +
             '<span class="hswatch"></span>' +
             '<span class="hinfo"><span class="hname">' + a.icon + " " + esc(step.name) + "</span>" +
             '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
@@ -1163,18 +1230,24 @@
     if (arr.length < 2) return "";
     var w = 240, h = 46, pad = 5;
     var max = Math.max.apply(null, arr), min = Math.min.apply(null, arr);
-    var range = (max - min) || 1;
+    var flat = (max === min);
+    var range = flat ? 1 : (max - min);
     var pts = arr.map(function (v, i) {
       var x = pad + (w - 2 * pad) * (i / (arr.length - 1));
-      var y = h - pad - (h - 2 * pad) * ((v - min) / range);
+      // An all-equal series sits on the mid-line rather than flat on the floor.
+      var frac = flat ? 0.5 : ((v - min) / range);
+      var y = h - pad - (h - 2 * pad) * frac;
       return { x: x, y: y, v: v };
     });
     var line = pts.map(function (p) { return p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ");
     var dots = pts.map(function (p, i) {
-      var lbl = (i === 0 || i === pts.length - 1) ? '<text class="spark-lbl" x="' + p.x.toFixed(1) + '" y="' + (p.y - 6).toFixed(1) + '" text-anchor="' + (i === 0 ? "start" : "end") + '">' + p.v + "</text>" : "";
+      // Keep the label inside the box so it can't collide with the heading above.
+      var ly = Math.max(p.y - 6, 9);
+      var lbl = (i === 0 || i === pts.length - 1) ? '<text class="spark-lbl" x="' + p.x.toFixed(1) + '" y="' + ly.toFixed(1) + '" text-anchor="' + (i === 0 ? "start" : "end") + '">' + p.v + "</text>" : "";
       return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.6"/>' + lbl;
     }).join("");
-    return '<svg class="spark" viewBox="0 0 ' + w + " " + h + '" width="100%" height="' + h + '" preserveAspectRatio="none" role="img" aria-label="Top set over time"><polyline points="' + line + '"/>' + dots + "</svg>";
+    // No preserveAspectRatio="none": that stretched the dots and labels into ovals.
+    return '<svg class="spark" viewBox="0 0 ' + w + " " + h + '" width="100%" height="' + h + '" role="img" aria-label="Top set over time"><polyline points="' + line + '"/>' + dots + "</svg>";
   }
 
   /* ---------- Stats / progress pane ---------- */
@@ -1186,20 +1259,25 @@
   function heatmapSVG() {
     var counts = trainingDaySet();
     var weeks = 26, cell = 13, size = 10;
-    var today = new Date(); today.setHours(0, 0, 0, 0);
-    var startOfWeek = new Date(today.getTime() - today.getDay() * 86400000);
-    var start = new Date(startOfWeek.getTime() - (weeks - 1) * 7 * 86400000);
+    var today = startOfDay(nowMs());
+    var startOfWeek = addDays(today, -today.getDay());
+    var start = addDays(startOfWeek, -(weeks - 1) * 7);
     var wpx = weeks * cell, hpx = 7 * cell;
     var rects = "";
+    // Opacity levels rather than color-mix(): universally supported, and still
+    // theme-aware because --good is themed.
+    var OPACITY = [0, 0.28, 0.5, 0.72, 1];
     for (var w = 0; w < weeks; w++) {
       for (var dd = 0; dd < 7; dd++) {
-        var day = new Date(start.getTime() + (w * 7 + dd) * 86400000);
+        var day = addDays(start, w * 7 + dd); // calendar-day step, DST-safe
         if (day.getTime() > today.getTime()) continue;
         var key = dateStr(day.getTime());
         var c = counts[key] || 0;
         var lvl = c === 0 ? 0 : (c >= 4 ? 4 : c);
-        var fill = c === 0 ? "var(--grid)" : "color-mix(in srgb, var(--good) " + (25 + lvl * 18) + "%, var(--surface))";
-        rects += '<rect x="' + (w * cell) + '" y="' + (dd * cell) + '" width="' + size + '" height="' + size + '" rx="2" fill="' + fill + '"><title>' + key + ": " + c + " session" + (c === 1 ? "" : "s") + "</title></rect>";
+        var fillAttr = c === 0
+          ? 'fill="var(--grid)"'
+          : 'fill="var(--good)" fill-opacity="' + OPACITY[lvl] + '"';
+        rects += '<rect x="' + (w * cell) + '" y="' + (dd * cell) + '" width="' + size + '" height="' + size + '" rx="2" ' + fillAttr + '><title>' + key + ": " + c + " session" + (c === 1 ? "" : "s") + "</title></rect>";
       }
     }
     return '<div class="heatmap-scroll"><svg class="heatmap" width="' + wpx + '" height="' + hpx + '" viewBox="0 0 ' + wpx + " " + hpx + '" role="img" aria-label="Training calendar, last 26 weeks">' + rects + "</svg></div>";
@@ -1211,7 +1289,7 @@
     return '<div class="mlist">' + ms.map(function (m) {
       var a = AREAS[areaIndexById(m.areaId)];
       var txt = m.type === "master"
-        ? ("Mastered " + a.name + " &#8212; all ten steps!")
+        ? ("Mastered " + esc(a.name) + " &#8212; all ten steps!")
         : ("Reached " + esc(a.steps[m.step - 1].name) + " (" + esc(a.name) + ")");
       return '<div class="mrow" style="--area:' + areaColorVar(a) + '"><span class="mswatch"></span>' +
         '<span class="minfo"><span class="mtxt">' + a.icon + " " + txt + "</span>" +
@@ -1224,8 +1302,8 @@
     var totalSessions = state.log.length;
     var daysTrained = Object.keys(trainingDaySet()).length;
     var cards = '<div class="statcards">' +
-      statCard(cur, cur === 1 ? "day streak" : "day streak") +
-      statCard(lng, "longest streak") +
+      statCard(cur, "day streak") +
+      statCard(lng, "longest streak (days)") +
       statCard(totalSessions, totalSessions === 1 ? "session" : "sessions") +
       statCard(daysTrained, daysTrained === 1 ? "day trained" : "days trained") +
       "</div>";
@@ -1276,7 +1354,8 @@
       "<h4>About</h4>" +
       "<p>Big Six Tracker follows ten-step progressions for the six fundamental bodyweight movements: pushups, squats, pullups, leg raises, bridges and handstand pushups. Each step has three goals — Beginner, Intermediate and Progression.</p>" +
       "<p>Rule of thumb: warm up, work hard on your current step, and only move up once you hit the Progression standard with clean, controlled form.</p>" +
-      (storageOk ? "" : "<p><strong>Heads up:</strong> saving is blocked in this browser (private browsing?). Your progress will be lost when you close the tab.</p>") +
+      (storageOk ? "" : "<p><strong>Heads up:</strong> saving isn't working in this browser (storage blocked, or full). Changes will be lost when you close the tab — download a backup file now.</p>") +
+      (loadFailed ? "<p><strong>Heads up:</strong> the progress stored on this device couldn't be read, so the app started empty. Nothing has been overwritten yet — if you have a backup file, restore it before logging anything new.</p>" : "") +
       "<h4>Danger zone</h4>" +
       '<button class="btn danger" id="resetBtn">Reset all progress</button>' +
       "</div>";
@@ -1384,7 +1463,13 @@
         b.addEventListener("click", function () {
           var val = b.getAttribute("data-routine");
           if (val === "off") { state.routine.enabled = false; }
-          else { state.routine.enabled = true; state.routine.daysPerWeek = Number(val); state.routine.sessionIndex = 0; }
+          else {
+            var days = Number(val);
+            // Only rewind the rotation when the split actually changes.
+            if (!state.routine.enabled || state.routine.daysPerWeek !== days) state.routine.sessionIndex = 0;
+            state.routine.enabled = true;
+            state.routine.daysPerWeek = days;
+          }
           saveState();
           renderToday();
           renderSheet();
@@ -1408,7 +1493,8 @@
       $("#qrBtn", sheet).addEventListener("click", function () {
         var box = $("#qrbox", sheet);
         if (box.childNodes.length) { box.innerHTML = ""; this.innerHTML = "&#9636; Show QR code"; }
-        else { renderQR(box); this.innerHTML = "&#9636; Hide QR code"; }
+        // Only flip to "Hide" if a code actually rendered.
+        else { this.innerHTML = renderQR(box) ? "&#9636; Hide QR code" : "&#9636; Show QR code"; }
       });
       $("#importBtn", sheet).addEventListener("click", function () {
         var incoming = decodeBackup($("#importCode", sheet).value);
@@ -1503,6 +1589,9 @@
   function applyImport(incoming) {
     AREAS.forEach(function (a) {
       if (incoming.areas[a.id]) state.areas[a.id] = incoming.areas[a.id];
+      // An imported position can already be a mastered area — record it so the
+      // milestone timeline isn't silently missing it.
+      checkMaster(a.id);
     });
     saveState();
     displayVals = AREAS.map(function (a) { return areaValue(a.id); });
@@ -1556,7 +1645,9 @@
   buildRadar();
   renderCards();
   renderToday();
-  recordSnapshot();     // capture today's shape so the ghost radar has history
+  // Capture today's shape for the ghost radar — but never auto-write over
+  // stored data we failed to read, so a recoverable backup isn't destroyed.
+  if (!loadFailed) recordSnapshot();
   updateGhostControl();
   booted = true;
 

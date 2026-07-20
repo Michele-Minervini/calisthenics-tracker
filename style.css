@@ -10,7 +10,9 @@
   --surface: #fcfcfb;
   --ink: #0b0b0b;
   --ink-2: #52514e;
-  --muted: #898781;
+  /* Darkened from #898781: that measured 3.5:1 on --surface, under WCAG AA
+     for normal text. #6b6a65 gives ~5.2:1. (Dark mode already passes.) */
+  --muted: #6b6a65;
   --grid: #e1e0d9;
   --axis: #c3c2b7;
   --border: rgba(11, 11, 11, 0.10);
@@ -825,10 +827,8 @@ button.today-card.setup .today-title { color: var(--accent); }
   color: var(--ink-2);
 }
 
-@media (min-width: 880px) {
-  /* Keep the Today card full-width above the two-column layout */
-  .today { grid-column: 1 / -1; }
-}
+/* (#today is a sibling of main.layout, not one of its grid items, so it is
+   already full-width — no grid-column rule needed.) */
 
 /* --- Ghost radar --- */
 #radar .ghost {
@@ -885,12 +885,14 @@ button.today-card.setup .today-title { color: var(--accent); }
 .heatmap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
 .heatmap { display: block; max-width: 100%; height: auto; }
 .hm-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; font-size: 0.72rem; color: var(--muted); margin: 8px 2px 0; }
+/* Opacity steps instead of color-mix(): same look, but works on every engine
+   (color-mix silently drops the whole declaration where unsupported). */
 .hm-l { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
 .hm-l0 { background: var(--grid); }
-.hm-l1 { background: color-mix(in srgb, var(--good) 43%, var(--surface)); }
-.hm-l2 { background: color-mix(in srgb, var(--good) 61%, var(--surface)); }
-.hm-l3 { background: color-mix(in srgb, var(--good) 79%, var(--surface)); }
-.hm-l4 { background: color-mix(in srgb, var(--good) 97%, var(--surface)); }
+.hm-l1 { background: var(--good); opacity: 0.28; }
+.hm-l2 { background: var(--good); opacity: 0.5; }
+.hm-l3 { background: var(--good); opacity: 0.72; }
+.hm-l4 { background: var(--good); }
 
 .mlist { display: flex; flex-direction: column; gap: 8px; }
 .mrow {
