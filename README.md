@@ -20,12 +20,19 @@ Pushups — each organized as a ladder of ten progressively harder steps.
   Progression goal it offers to move you up a step.
 - **Rest timer.** One-tap presets (1/2/3/5 min) start a floating countdown that
   keeps running while you browse other exercises and pings when it's done.
-- **Training history.** The calendar button (top of the screen) shows every
-  logged session, grouped by date, and each exercise shows its recent sessions.
+- **Training history & progress.** The calendar button lists every session
+  (tap one to edit it); the chart button opens a Progress view with a
+  GitHub-style training heatmap, streak counters, and a milestone timeline.
+  Each exercise shows a top-set sparkline over time.
+- **Weekly routine + Today card.** Pick a 2/3/6-day split in Settings and the
+  home screen shows today's session (ticks off as you log), plus a smart nudge
+  when a movement is lagging.
+- **Ghost radar.** Toggle "Show where I started" to see your past shape behind
+  today's.
 - Everything is saved automatically in the browser (`localStorage`) — no
   account, no server, no cost. Settings gives you a quick progress **link**
-  (progress only) and a full **backup file** (progress + history) to move
-  between devices.
+  (progress only, also as a scannable **QR code**) and a full **backup file**
+  (progress + history) to move between devices.
 - Works offline and can be installed on the iPhone home screen
   (Safari → Share → **Add to Home Screen**).
 
@@ -36,7 +43,8 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 | `index.html` | The page skeleton |
 | `style.css` | All styling (light + dark theme) |
 | `data.js` | The content: all 60 exercises, descriptions, rep goals |
-| `app.js` | The logic: radar drawing, navigation, saving/loading |
+| `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
+| `qrcode.js` | Self-contained QR-code generator (no dependencies) |
 | `sw.js` | Service worker — makes the app work offline |
 | `manifest.webmanifest` + `icons/` | App name/icon for "Add to Home Screen" |
 

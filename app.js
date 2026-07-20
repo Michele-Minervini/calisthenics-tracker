@@ -1,12 +1,15 @@
 /* ============================================================
    Big Six Tracker — app logic
    Plain JavaScript, no dependencies.
-   State shape (v2, migrates from v1 automatically):
+   State shape (v3, migrates from v1/v2 automatically):
    {
-     v: 2,
+     v: 3,
      areas: { [areaId]: { step: 1..10, std: 0..3 } },
      log:   [ { id, ts, date:"YYYY-MM-DD", areaId, step, sets:[n,...], note } ],
-     settings: { restSeconds }
+     settings: { restSeconds },
+     routine: { enabled, daysPerWeek: 2|3|6, sessionIndex },
+     snapshots: [ { d:"YYYY-MM-DD", v:[6 radar values] } ],   // ghost radar
+     milestones: [ { id, ts, type:"advance"|"master", areaId, step } ]
    }
    std: 0 = working on it, 1 = beginner met, 2 = intermediate met,
         3 = progression (or elite) met.
@@ -41,6 +44,15 @@
   var KNOWN_IDS = AREAS.map(function (a) { return a.id; });
   var DEFAULT_REST = 180; // seconds
 
+  // Guided routine presets: each is a list of sessions (a session = the areas
+  // trained that day). Every preset covers all six movements once per cycle.
+  var ROUTINE_PRESETS = {
+    2: [["pushup", "pullup", "legraise"], ["squat", "bridge", "hspu"]],
+    3: [["pushup", "squat"], ["pullup", "legraise"], ["hspu", "bridge"]],
+    6: [["pushup"], ["squat"], ["pullup"], ["legraise"], ["bridge"], ["hspu"]]
+  };
+  function routineSessions() { return ROUTINE_PRESETS[state.routine.daysPerWeek] || ROUTINE_PRESETS[3]; }
+
   /* ---------- State ---------- */
 
   var memoryFallback = null;
@@ -49,7 +61,15 @@
   function defaultState() {
     var areas = {};
     AREAS.forEach(function (a) { areas[a.id] = { step: 1, std: 0 }; });
-    return { v: 2, areas: areas, log: [], settings: { restSeconds: DEFAULT_REST } };
+    return {
+      v: 3,
+      areas: areas,
+      log: [],
+      settings: { restSeconds: DEFAULT_REST },
+      routine: { enabled: false, daysPerWeek: 3, sessionIndex: 0 },
+      snapshots: [],   // [{ d:"YYYY-MM-DD", v:[6 radar values] }] for the ghost radar
+      milestones: []   // [{ id, ts, type:"advance"|"master", areaId, step }]
+    };
   }
 
   function loadState() {
@@ -96,7 +116,39 @@
       var rs = Math.round(Number(s.settings.restSeconds));
       if (rs >= 5 && rs <= 3600) out.settings.restSeconds = rs;
     }
+    if (s.routine && typeof s.routine === "object") {
+      var dpw = Math.round(Number(s.routine.daysPerWeek));
+      if ([2, 3, 6].indexOf(dpw) !== -1) out.routine.daysPerWeek = dpw;
+      out.routine.enabled = !!s.routine.enabled;
+      var si = Math.round(Number(s.routine.sessionIndex));
+      if (si >= 0 && si < 50) out.routine.sessionIndex = si;
+    }
+    if (Array.isArray(s.snapshots)) {
+      out.snapshots = s.snapshots.map(sanitizeSnapshot).filter(Boolean).slice(-400);
+    }
+    if (Array.isArray(s.milestones)) {
+      out.milestones = s.milestones.map(sanitizeMilestone).filter(Boolean).slice(-500);
+    }
     return out;
+  }
+
+  function sanitizeSnapshot(sn) {
+    if (!sn || typeof sn !== "object") return null;
+    if (typeof sn.d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(sn.d)) return null;
+    if (!Array.isArray(sn.v) || sn.v.length !== AREAS.length) return null;
+    var v = sn.v.map(function (x) { var n = Number(x); return (isFinite(n) && n >= 0 && n <= 10) ? n : 0; });
+    return { d: sn.d, v: v };
+  }
+
+  function sanitizeMilestone(m) {
+    if (!m || typeof m !== "object") return null;
+    if (["advance", "master"].indexOf(m.type) === -1) return null;
+    if (KNOWN_IDS.indexOf(m.areaId) === -1) return null;
+    var step = Math.round(Number(m.step));
+    if (!(step >= 1 && step <= 10)) return null;
+    var ts = Number(m.ts); if (!isFinite(ts) || ts <= 0) ts = nowMs();
+    var id = (typeof m.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(m.id)) ? m.id : genId();
+    return { id: id, ts: ts, type: m.type, areaId: m.areaId, step: step };
   }
 
   function sanitizeLogEntry(e) {
@@ -263,6 +315,114 @@
     if (e.sets.length === 1) return e.sets[0] + " " + unit;
     return e.sets.length + " sets: " + e.sets.join(", ") + " " + unit;
   }
+  function topSet(e) { return e.sets.reduce(function (m, v) { return v > m ? v : m; }, 0); }
+  function lastSessionTs(areaId) {
+    var last = 0;
+    state.log.forEach(function (e) { if (e.areaId === areaId && e.ts > last) last = e.ts; });
+    return last;
+  }
+  function trainedToday(areaId) {
+    var today = dateStr(nowMs());
+    return state.log.some(function (e) { return e.areaId === areaId && dateStr(e.ts) === today; });
+  }
+
+  /* ---------- Snapshots (ghost radar) ---------- */
+
+  function currentRadarVals() { return AREAS.map(function (a) { return areaValue(a.id); }); }
+
+  // Keep one snapshot per calendar day (latest values win). Called on boot and
+  // after any progress change, so the ghost radar reflects real history.
+  function recordSnapshot() {
+    var d = dateStr(nowMs());
+    var v = currentRadarVals();
+    var last = state.snapshots[state.snapshots.length - 1];
+    if (last && last.d === d) { last.v = v; }
+    else state.snapshots.push({ d: d, v: v });
+    if (state.snapshots.length > 400) state.snapshots = state.snapshots.slice(-400);
+    saveState();
+  }
+  // The oldest snapshot that actually differs from today's shape (else no ghost).
+  function ghostSnapshot() {
+    if (state.snapshots.length < 2) return null;
+    var now = currentRadarVals();
+    var oldest = state.snapshots[0];
+    var differs = oldest.v.some(function (x, i) { return Math.abs(x - now[i]) > 0.001; });
+    return differs ? oldest : null;
+  }
+
+  /* ---------- Milestones ---------- */
+
+  function recordMilestone(type, areaId, step) {
+    state.milestones.push({ id: genId(), ts: nowMs(), type: type, areaId: areaId, step: step });
+  }
+  // Record a "mastered" milestone once, when an area first reaches step 10 + Elite.
+  function checkMaster(areaId) {
+    var st = state.areas[areaId];
+    if (st.step === 10 && st.std === 3) {
+      var has = state.milestones.some(function (m) { return m.type === "master" && m.areaId === areaId; });
+      if (!has) recordMilestone("master", areaId, 10);
+    }
+  }
+  // Central point for changing an area's step/std so milestones are recorded once.
+  function setAreaProgress(areaId, newStep, newStd) {
+    var old = state.areas[areaId];
+    var oldStep = old.step;
+    state.areas[areaId] = { step: newStep, std: newStd };
+    if (newStep > oldStep) recordMilestone("advance", areaId, newStep);
+    checkMaster(areaId);
+    saveState();
+    recordSnapshot();
+  }
+
+  /* ---------- Streak + training days ---------- */
+
+  function trainingDaySet() {
+    var s = {};
+    state.log.forEach(function (e) { s[dateStr(e.ts)] = (s[dateStr(e.ts)] || 0) + 1; });
+    return s;
+  }
+  function currentStreak() {
+    var days = trainingDaySet();
+    var d = new Date();
+    // Today not trained yet shouldn't break a streak — count from yesterday.
+    if (!days[dateStr(d.getTime())]) d = new Date(d.getTime() - 86400000);
+    var streak = 0;
+    while (days[dateStr(d.getTime())]) { streak++; d = new Date(d.getTime() - 86400000); }
+    return streak;
+  }
+  function longestStreak() {
+    var days = Object.keys(trainingDaySet()).sort();
+    var best = 0, run = 0, prev = null;
+    days.forEach(function (k) {
+      if (prev !== null && (dateFromKey(k) - prev) === 86400000) run++;
+      else run = 1;
+      if (run > best) best = run;
+      prev = dateFromKey(k);
+    });
+    return best;
+  }
+  function dateFromKey(k) {
+    var p = k.split("-");
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getTime();
+  }
+
+  /* ---------- Smart nudge ---------- */
+
+  function smartNudge() {
+    if (!state.log.length) return "";
+    var today = nowMs();
+    var worst = null, worstGap = -1;
+    AREAS.forEach(function (a) {
+      var last = lastSessionTs(a.id);
+      var gap = last ? Math.floor((today - last) / 86400000) : 9999;
+      if (gap > worstGap) { worstGap = gap; worst = a; }
+    });
+    if (worst && worstGap >= 900) return "You haven't logged " + shortAreaName(worst) + " yet — give it a try.";
+    if (worst && worstGap >= 5) return "You haven't trained " + shortAreaName(worst) + " in " + worstGap + " days.";
+    var st = currentStreak();
+    if (st >= 2) return "🔥 " + st + "-day streak — keep it going!";
+    return "";
+  }
 
   /* ---------- Rest timer (global, foreground countdown) ---------- */
 
@@ -341,6 +501,31 @@
     } catch (e) { toast("Couldn't create the backup file"); }
   }
 
+  /* ---------- QR code for the backup link ---------- */
+
+  function renderQR(container) {
+    container.innerHTML = "";
+    if (typeof QR === "undefined") { container.textContent = "QR generator unavailable."; return; }
+    var m = QR.generate(shareURL());
+    if (!m) { container.textContent = "Link is too long for a QR code."; return; }
+    var n = m.length, quiet = 4, scale = 6, px = (n + quiet * 2) * scale;
+    var canvas = document.createElement("canvas");
+    canvas.width = px; canvas.height = px;
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", "QR code of your backup link");
+    var ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, px, px);
+    ctx.fillStyle = "#000000";
+    for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) {
+      if (m[r][c]) ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+    }
+    container.appendChild(canvas);
+    var cap = document.createElement("p");
+    cap.className = "qrcap";
+    cap.textContent = "Scan with the other device's camera to open your progress.";
+    container.appendChild(cap);
+  }
+
   /* ---------- Radar ---------- */
 
   var CX = 210, CY = 196, R = 134;
@@ -410,6 +595,9 @@
       svg.appendChild(el("text", { x: pos[0] + 5, y: pos[1] + 3, "class": "ringnum" }, String(n)));
     });
 
+    // Ghost shape (a past snapshot), drawn behind the current shape.
+    svg.appendChild(el("polygon", { points: "", "class": "ghost", id: "ghost" }));
+
     // Data shape (pointer-transparent)
     svg.appendChild(el("polygon", { points: "", "class": "shape", id: "shape" }));
 
@@ -467,6 +655,33 @@
       var t = $("#axstep-" + a.id);
       if (t) t.textContent = "Step " + state.areas[a.id].step;
     });
+    paintGhost();
+  }
+
+  var ghostOn = false;
+  function paintGhost() {
+    var g = $("#ghost");
+    if (!g) return;
+    var gs = ghostOn ? ghostSnapshot() : null;
+    if (!gs) { g.style.display = "none"; return; }
+    var gpts = AREAS.map(function (a, i) {
+      return polar(i, R * Math.max(0, Math.min(10, gs.v[i])) / 10).join(",");
+    });
+    g.setAttribute("points", gpts.join(" "));
+    g.style.display = "";
+  }
+  function shortDate(dkey) {
+    try { return new Date(dateFromKey(dkey)).toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+    catch (e) { return dkey; }
+  }
+  function updateGhostControl() {
+    var btn = $("#ghostToggle");
+    if (!btn) return;
+    var gs = ghostSnapshot();
+    if (!gs) { btn.hidden = true; ghostOn = false; return; }
+    btn.hidden = false;
+    btn.setAttribute("aria-pressed", ghostOn ? "true" : "false");
+    btn.textContent = ghostOn ? ("Hide start (" + shortDate(gs.d) + ")") : "Show where I started";
   }
 
   function animateRadar() {
@@ -542,6 +757,59 @@
     host.innerHTML = html;
   }
 
+  /* ---------- Today card + smart nudge (home) ---------- */
+
+  function renderToday() {
+    var host = $("#today");
+    if (!host) return;
+    var parts = [];
+
+    if (state.routine.enabled) {
+      var sessions = routineSessions();
+      var idx = state.routine.sessionIndex % sessions.length;
+      var sess = sessions[idx];
+      var allDone = sess.every(function (id) { return trainedToday(id); });
+      var rows = sess.map(function (id) {
+        var ai = areaIndexById(id);
+        var a = AREAS[ai];
+        var st = state.areas[id];
+        var done = trainedToday(id);
+        return '<button class="td-move' + (done ? " done" : "") + '" data-area="' + ai + '" style="--area:' + areaColorVar(a) + '">' +
+          '<span class="tdcheck">' + (done ? "&#10003;" : "") + "</span>" +
+          '<span class="tdinfo"><span class="tdname">' + a.icon + " " + esc(a.name) + "</span>" +
+          '<span class="tdstep">Step ' + st.step + " &middot; " + esc(a.steps[st.step - 1].name) + "</span></span>" +
+          '<span class="chev">&#8250;</span></button>';
+      }).join("");
+      parts.push('<div class="today-card">' +
+        '<div class="today-head"><span class="today-title">Today&#8217;s session</span><span class="today-count">' + (idx + 1) + " of " + sessions.length + "</span></div>" +
+        '<div class="td-moves">' + rows + "</div>" +
+        '<button class="btn' + (allDone ? " primary" : "") + ' wide" id="nextSessionBtn">' + (allDone ? "Session done &#8212; next session &#8594;" : "Skip to next session &#8594;") + "</button>" +
+        "</div>");
+    } else {
+      parts.push('<button class="today-card setup" id="setupRoutineBtn">' +
+        '<span class="today-title">&#43; Set up a weekly routine</span>' +
+        '<span class="today-sub">Get a &#8220;today&#8217;s session&#8221; plan across your week.</span></button>');
+    }
+
+    var nudge = smartNudge();
+    if (nudge) parts.push('<div class="nudge">' + esc(nudge) + "</div>");
+    host.innerHTML = parts.join("");
+
+    host.querySelectorAll(".td-move").forEach(function (b) {
+      b.addEventListener("click", function () { openCurrentStep(Number(b.getAttribute("data-area"))); });
+    });
+    var ns = $("#nextSessionBtn", host);
+    if (ns) ns.addEventListener("click", function () {
+      var sessions2 = routineSessions();
+      state.routine.sessionIndex = (state.routine.sessionIndex + 1) % sessions2.length;
+      saveState();
+      renderToday();
+      toast("Next session ready");
+    });
+    var setup = $("#setupRoutineBtn", host);
+    if (setup) setup.addEventListener("click", openSettings);
+  }
+
   /* ---------- Sheet navigation (in-app stack, no browser history) ---------- */
 
   var uiStack = [];
@@ -569,16 +837,26 @@
   }
 
   function openHistory() { pushView({ t: "history" }); }
+  function openStats() { pushView({ t: "stats" }); }
 
-  // Draft for the in-progress log form, so re-renders (add/remove set) keep values.
-  var logDraft = { key: "", sets: [], note: "" };
+  // Draft for the in-progress log/edit form, so re-renders keep values.
+  var logDraft = { key: "", sets: [], note: "", editId: null };
 
   function openLog(areaIdx, stepIdx) {
     var step = AREAS[areaIdx].steps[stepIdx];
-    logDraft = { key: areaIdx + ":" + stepIdx, sets: [], note: "" };
+    logDraft = { key: areaIdx + ":" + stepIdx, sets: [], note: "", editId: null };
     var rows = step.timed ? 1 : 2;
     for (var i = 0; i < rows; i++) logDraft.sets.push("");
     pushView({ t: "log", a: areaIdx, s: stepIdx });
+  }
+
+  function openEditSession(id) {
+    var e = null;
+    state.log.forEach(function (x) { if (x.id === id) e = x; });
+    if (!e) return;
+    var ai = areaIndexById(e.areaId);
+    logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id };
+    pushView({ t: "log", a: ai, s: e.step - 1 });
   }
 
   function readLogInputs() {
@@ -599,6 +877,18 @@
     });
     if (!sets.length) { toast("Enter at least one set"); return; }
 
+    // Edit mode: just update the existing entry's numbers/note.
+    if (logDraft.editId) {
+      var target = null;
+      state.log.forEach(function (x) { if (x.id === logDraft.editId) target = x; });
+      if (target) { target.sets = sets; target.note = logDraft.note; saveState(); }
+      logDraft = { key: "", sets: [], note: "", editId: null };
+      refresh();
+      goBack();
+      toast("Session updated ✓");
+      return;
+    }
+
     var isCurrent = state.areas[a.id].step === n;
     var prevStd = state.areas[a.id].std;
     addLogEntry(a.id, n, sets, logDraft.note);
@@ -608,7 +898,9 @@
       var det = detectStandard(step, sets);
       if (det > prevStd) {
         state.areas[a.id].std = det;
+        checkMaster(a.id);
         saveState();
+        recordSnapshot();
         var label = step.standards[det - 1].label;
         msg = (det === 3 && n < 10) ? (label + " standard met — ready to move up!") : (label + " standard met!");
       }
@@ -667,6 +959,7 @@
     else if (view.t === "step") sheet.innerHTML = stepPaneHTML(view.a, view.s);
     else if (view.t === "log") sheet.innerHTML = logPaneHTML(view.a, view.s);
     else if (view.t === "history") sheet.innerHTML = historyPaneHTML();
+    else if (view.t === "stats") sheet.innerHTML = statsPaneHTML();
     else sheet.innerHTML = settingsPaneHTML();
     wireSheet(view);
     var body = $(".sheet-body", sheet);
@@ -743,7 +1036,11 @@
       progressHTML += '<button class="btn wide" id="setCurrentBtn" style="--area:' + color + '">Set this as my current step</button>';
     }
 
-    var recent = sessionsForStep(a.id, n).slice(0, 3);
+    var stepSessions = sessionsForStep(a.id, n);
+    var recent = stepSessions.slice(0, 3);
+    var sparkHTML = stepSessions.length >= 2
+      ? '<div class="sparkwrap"><span class="sparklabel">' + (step.timed ? "Best hold" : "Top set") + " over time</span>" + sparklineSVG(stepSessions) + "</div>"
+      : "";
     var recentHTML = recent.length
       ? '<div class="recent">' + recent.map(function (e) {
           return '<div class="recent-row"><span class="rdate">' + esc(prettyDate(e.ts)) + "</span><span class=\"rsets\">" + esc(setsSummary(e, step)) + "</span></div>";
@@ -751,7 +1048,7 @@
       : '<p class="muted-note">No sessions logged for this exercise yet.</p>';
     var logSection = "<h4>Log training</h4>" +
       '<button class="btn primary wide" id="logBtn" style="--area:' + color + '">&#65291; Log a session</button>' +
-      recentHTML;
+      sparkHTML + recentHTML;
 
     return sheetHead({
       title: esc(step.name) + (step.master ? ' <span class="tag master" style="--area:' + color + '">MASTER</span>' : ""),
@@ -800,11 +1097,12 @@
       return esc(s.label) + ": " + esc(s.target.replace(/\s*\(each side\)/, ""));
     }).join("  &middot;  ");
 
-    var notCurrentNote = isCurrent ? "" :
+    var editing = !!logDraft.editId;
+    var notCurrentNote = (isCurrent || editing) ? "" :
       '<p class="hintbox">You are logging Step ' + n + ", which isn't your current step. It will be saved in your history but won't change your current step.</p>";
 
     return sheetHead({
-      title: "Log &middot; " + esc(step.name),
+      title: (editing ? "Edit &middot; " : "Log &middot; ") + esc(step.name),
       sub: "Step " + n + " of 10 &middot; " + esc(a.name),
       areaColor: color,
       back: true,
@@ -845,27 +1143,129 @@
           var a = AREAS[areaIndexById(e.areaId)];
           var step = a.steps[e.step - 1];
           return '<div class="hitem" style="--area:' + areaColorVar(a) + '">' +
+            '<button class="hopen" data-id="' + esc(e.id) + '" aria-label="Edit this session">' +
             '<span class="hswatch"></span>' +
             '<span class="hinfo"><span class="hname">' + a.icon + " " + esc(step.name) + "</span>" +
-            '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span>" +
+            '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
             '<button class="hdel" data-id="' + esc(e.id) + '" aria-label="Delete this entry">&#128465;</button></div>';
         }).join("");
         return '<div class="hgroup"><div class="hdate">' + esc(prettyDate(g.ts)) + "</div>" + rows + "</div>";
       }).join("");
     }
     return sheetHead({ title: "&#128197; Training history", sub: "", back: false }) +
-      '<div class="sheet-body history">' + body + "</div>";
+      '<div class="sheet-body history">' + (sessions.length ? '<p class="muted-note">Tap a session to edit it.</p>' : "") + body + "</div>";
+  }
+
+  /* ---------- Sparkline (per-exercise, top set over time) ---------- */
+
+  function sparklineSVG(entries) {
+    var arr = entries.slice().reverse().map(topSet); // oldest -> newest
+    if (arr.length < 2) return "";
+    var w = 240, h = 46, pad = 5;
+    var max = Math.max.apply(null, arr), min = Math.min.apply(null, arr);
+    var range = (max - min) || 1;
+    var pts = arr.map(function (v, i) {
+      var x = pad + (w - 2 * pad) * (i / (arr.length - 1));
+      var y = h - pad - (h - 2 * pad) * ((v - min) / range);
+      return { x: x, y: y, v: v };
+    });
+    var line = pts.map(function (p) { return p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ");
+    var dots = pts.map(function (p, i) {
+      var lbl = (i === 0 || i === pts.length - 1) ? '<text class="spark-lbl" x="' + p.x.toFixed(1) + '" y="' + (p.y - 6).toFixed(1) + '" text-anchor="' + (i === 0 ? "start" : "end") + '">' + p.v + "</text>" : "";
+      return '<circle cx="' + p.x.toFixed(1) + '" cy="' + p.y.toFixed(1) + '" r="2.6"/>' + lbl;
+    }).join("");
+    return '<svg class="spark" viewBox="0 0 ' + w + " " + h + '" width="100%" height="' + h + '" preserveAspectRatio="none" role="img" aria-label="Top set over time"><polyline points="' + line + '"/>' + dots + "</svg>";
+  }
+
+  /* ---------- Stats / progress pane ---------- */
+
+  function statCard(value, label) {
+    return '<div class="statcard"><span class="statval">' + value + '</span><span class="statlab">' + esc(label) + "</span></div>";
+  }
+
+  function heatmapSVG() {
+    var counts = trainingDaySet();
+    var weeks = 26, cell = 13, size = 10;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var startOfWeek = new Date(today.getTime() - today.getDay() * 86400000);
+    var start = new Date(startOfWeek.getTime() - (weeks - 1) * 7 * 86400000);
+    var wpx = weeks * cell, hpx = 7 * cell;
+    var rects = "";
+    for (var w = 0; w < weeks; w++) {
+      for (var dd = 0; dd < 7; dd++) {
+        var day = new Date(start.getTime() + (w * 7 + dd) * 86400000);
+        if (day.getTime() > today.getTime()) continue;
+        var key = dateStr(day.getTime());
+        var c = counts[key] || 0;
+        var lvl = c === 0 ? 0 : (c >= 4 ? 4 : c);
+        var fill = c === 0 ? "var(--grid)" : "color-mix(in srgb, var(--good) " + (25 + lvl * 18) + "%, var(--surface))";
+        rects += '<rect x="' + (w * cell) + '" y="' + (dd * cell) + '" width="' + size + '" height="' + size + '" rx="2" fill="' + fill + '"><title>' + key + ": " + c + " session" + (c === 1 ? "" : "s") + "</title></rect>";
+      }
+    }
+    return '<div class="heatmap-scroll"><svg class="heatmap" width="' + wpx + '" height="' + hpx + '" viewBox="0 0 ' + wpx + " " + hpx + '" role="img" aria-label="Training calendar, last 26 weeks">' + rects + "</svg></div>";
+  }
+
+  function milestonesHTML() {
+    var ms = state.milestones.slice().sort(function (a, b) { return b.ts - a.ts; });
+    if (!ms.length) return '<p class="muted-note">Milestones will appear here as you reach new steps.</p>';
+    return '<div class="mlist">' + ms.map(function (m) {
+      var a = AREAS[areaIndexById(m.areaId)];
+      var txt = m.type === "master"
+        ? ("Mastered " + a.name + " &#8212; all ten steps!")
+        : ("Reached " + esc(a.steps[m.step - 1].name) + " (" + esc(a.name) + ")");
+      return '<div class="mrow" style="--area:' + areaColorVar(a) + '"><span class="mswatch"></span>' +
+        '<span class="minfo"><span class="mtxt">' + a.icon + " " + txt + "</span>" +
+        '<span class="mdate">' + esc(prettyDate(m.ts)) + "</span></span></div>";
+    }).join("") + "</div>";
+  }
+
+  function statsPaneHTML() {
+    var cur = currentStreak(), lng = longestStreak();
+    var totalSessions = state.log.length;
+    var daysTrained = Object.keys(trainingDaySet()).length;
+    var cards = '<div class="statcards">' +
+      statCard(cur, cur === 1 ? "day streak" : "day streak") +
+      statCard(lng, "longest streak") +
+      statCard(totalSessions, totalSessions === 1 ? "session" : "sessions") +
+      statCard(daysTrained, daysTrained === 1 ? "day trained" : "days trained") +
+      "</div>";
+    return sheetHead({ title: "&#128202; Progress", sub: "", back: false }) +
+      '<div class="sheet-body stats">' +
+      cards +
+      "<h4>Training calendar</h4>" + heatmapSVG() +
+      '<p class="hm-legend">Less <span class="hm-l hm-l0"></span><span class="hm-l hm-l1"></span><span class="hm-l hm-l2"></span><span class="hm-l hm-l3"></span><span class="hm-l hm-l4"></span> More</p>' +
+      "<h4>Milestones</h4>" + milestonesHTML() +
+      "</div>";
   }
 
   /* ---------- Settings pane ---------- */
 
+  function routinePreviewHTML() {
+    var sessions = ROUTINE_PRESETS[state.routine.daysPerWeek] || ROUTINE_PRESETS[3];
+    return sessions.map(function (sess, i) {
+      return '<div class="rp-row"><span class="rp-day">Day ' + (i + 1) + "</span><span class=\"rp-moves\">" +
+        sess.map(function (id) { var a = AREAS[areaIndexById(id)]; return a.icon + " " + esc(shortAreaName(a)); }).join(", ") +
+        "</span></div>";
+    }).join("");
+  }
+
   function settingsPaneHTML() {
     var url = shareURL();
+    var routineChips = '<button class="chip' + (!state.routine.enabled ? " sel" : "") + '" data-routine="off">Off</button>' +
+      [2, 3, 6].map(function (d) {
+        return '<button class="chip' + ((state.routine.enabled && state.routine.daysPerWeek === d) ? " sel" : "") + '" data-routine="' + d + '">' + d + " days/week</button>";
+      }).join("");
     return sheetHead({ title: "&#9881;&#65039; Settings &amp; backup", sub: "", back: false }) +
       '<div class="sheet-body settings">' +
+      "<h4>Weekly routine</h4>" +
+      "<p>Get a &#8220;today&#8217;s session&#8221; plan on the home screen. Pick how many days a week you train and the app spreads the six movements across them.</p>" +
+      '<div class="chips">' + routineChips + "</div>" +
+      '<div class="routine-preview">' + routinePreviewHTML() + "</div>" +
       "<h4>Move progress between devices</h4>" +
       "<p>Your progress lives only in this browser. To carry it to another device, copy this backup link and open it there — or paste a link from another device below.</p>" +
       '<div class="copyrow"><input type="text" readonly id="shareUrl" value="' + esc(url) + '"><button class="btn" id="copyBtn">Copy</button></div>' +
+      '<div class="btnrow"><button class="btn" id="qrBtn">&#9636; Show QR code</button></div>' +
+      '<div id="qrbox" class="qrbox"></div>' +
       '<div class="copyrow"><input type="text" id="importCode" placeholder="Paste a backup link from another device&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="importBtn">Import</button></div>' +
       "<p>The link carries your progress only (which step you're on). For your full training history, use the file backup below.</p>" +
       "<h4>Full backup (progress + history)</h4>" +
@@ -914,25 +1314,22 @@
       sheet.querySelectorAll(".chip").forEach(function (c) {
         c.addEventListener("click", function () {
           state.areas[a.id].std = Number(c.getAttribute("data-std"));
-          saveState();
+          checkMaster(a.id);
+          recordSnapshot(); // saves state (incl. any milestone)
           refresh();
           renderSheet();
         });
       });
       var setBtn = $("#setCurrentBtn", sheet);
       if (setBtn) setBtn.addEventListener("click", function () {
-        state.areas[a.id].step = view.s + 1;
-        state.areas[a.id].std = 0;
-        saveState();
+        setAreaProgress(a.id, view.s + 1, 0);
         refresh();
         renderSheet();
         toast(a.name + ": current step set to " + (view.s + 1));
       });
       var adv = $("#advanceBtn", sheet);
       if (adv) adv.addEventListener("click", function () {
-        state.areas[a.id].step = view.s + 2;
-        state.areas[a.id].std = 0;
-        saveState();
+        setAreaProgress(a.id, view.s + 2, 0);
         refresh();
         // Show the newly-current step in place of this one
         uiStack[uiStack.length - 1] = { t: "step", a: view.a, s: view.s + 1 };
@@ -968,6 +1365,9 @@
     }
 
     if (view.t === "history") {
+      sheet.querySelectorAll(".hopen").forEach(function (b) {
+        b.addEventListener("click", function () { openEditSession(b.getAttribute("data-id")); });
+      });
       sheet.querySelectorAll(".hdel").forEach(function (b) {
         b.addEventListener("click", function () {
           if (confirm("Delete this logged session?")) {
@@ -980,6 +1380,16 @@
     }
 
     if (view.t === "settings") {
+      sheet.querySelectorAll("[data-routine]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var val = b.getAttribute("data-routine");
+          if (val === "off") { state.routine.enabled = false; }
+          else { state.routine.enabled = true; state.routine.daysPerWeek = Number(val); state.routine.sessionIndex = 0; }
+          saveState();
+          renderToday();
+          renderSheet();
+        });
+      });
       $("#copyBtn", sheet).addEventListener("click", function () {
         var input = $("#shareUrl", sheet);
         var fallback = function () {
@@ -994,6 +1404,11 @@
         } else {
           fallback();
         }
+      });
+      $("#qrBtn", sheet).addEventListener("click", function () {
+        var box = $("#qrbox", sheet);
+        if (box.childNodes.length) { box.innerHTML = ""; this.innerHTML = "&#9636; Show QR code"; }
+        else { renderQR(box); this.innerHTML = "&#9636; Hide QR code"; }
       });
       $("#importBtn", sheet).addEventListener("click", function () {
         var incoming = decodeBackup($("#importCode", sheet).value);
@@ -1044,7 +1459,14 @@
   });
   $("#settingsBtn").addEventListener("click", openSettings);
   $("#historyBtn").addEventListener("click", openHistory);
+  $("#statsBtn").addEventListener("click", openStats);
   $("#restpill").addEventListener("click", cancelRest);
+  var ghostBtn = $("#ghostToggle");
+  if (ghostBtn) ghostBtn.addEventListener("click", function () {
+    ghostOn = !ghostOn;
+    paintGhost();
+    updateGhostControl();
+  });
 
   /* ---------- Share / import ---------- */
 
@@ -1084,7 +1506,7 @@
     });
     saveState();
     displayVals = AREAS.map(function (a) { return areaValue(a.id); });
-    if (booted) { paintRadar(); renderCards(); }
+    if (booted) { recordSnapshot(); paintRadar(); renderCards(); renderToday(); updateGhostControl(); }
     toast("Progress imported ✓");
   }
 
@@ -1093,7 +1515,7 @@
     state = incoming;
     saveState();
     displayVals = AREAS.map(function (a) { return areaValue(a.id); });
-    if (booted) { paintRadar(); renderCards(); }
+    if (booted) { recordSnapshot(); paintRadar(); renderCards(); renderToday(); updateGhostControl(); }
     toast(msg || "Restored ✓");
   }
 
@@ -1121,6 +1543,8 @@
   function refresh() {
     renderCards();
     animateRadar();
+    renderToday();
+    updateGhostControl();
   }
 
   $("#cards").addEventListener("click", function (e) {
@@ -1131,6 +1555,9 @@
   tryImportFromHash();
   buildRadar();
   renderCards();
+  renderToday();
+  recordSnapshot();     // capture today's shape so the ghost radar has history
+  updateGhostControl();
   booted = true;
 
   // Ask the browser to protect our saved data from automatic eviction

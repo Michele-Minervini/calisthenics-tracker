@@ -763,3 +763,183 @@ footer.app a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   #restpill { transition: none !important; }
 }
+
+/* ============================================================
+   Tier 2: Today card, routine, ghost radar, stats, sparkline
+   ============================================================ */
+
+/* --- Today card + nudge --- */
+.today { display: block; margin: 0 0 4px; }
+.today:empty { display: none; }
+.today-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+}
+.today-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.today-title { font-weight: 750; font-size: 1rem; }
+.today-count { font-size: 0.76rem; color: var(--muted); font-weight: 650; }
+.today-sub { display: block; font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+button.today-card.setup { cursor: pointer; }
+button.today-card.setup .today-title { color: var(--accent); }
+
+.td-moves { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.td-move {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 11px;
+}
+.td-move .tdcheck {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--axis);
+  color: var(--surface);
+  display: grid; place-items: center;
+  font-size: 0.8rem; font-weight: 700;
+  flex: none;
+}
+.td-move.done .tdcheck { background: var(--area); border-color: var(--area); }
+.td-move .tdinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.td-move .tdname { font-weight: 700; font-size: 0.9rem; }
+.td-move .tdstep { font-size: 0.76rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-move .chev { color: var(--muted); font-size: 1rem; }
+.td-move.done .tdname { color: var(--ink-2); }
+
+.nudge {
+  margin-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+
+@media (min-width: 880px) {
+  /* Keep the Today card full-width above the two-column layout */
+  .today { grid-column: 1 / -1; }
+}
+
+/* --- Ghost radar --- */
+#radar .ghost {
+  fill: var(--area, var(--ink));
+  fill-opacity: 0.05;
+  stroke: var(--ink-2);
+  stroke-opacity: 0.5;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.radar-ctrl { text-align: center; padding: 2px 0 0; }
+.ghostbtn {
+  font-size: 0.76rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.ghostbtn[aria-pressed="true"] { border-color: var(--axis); color: var(--ink); }
+.ghostbtn[hidden] { display: none; }
+
+/* --- Sparkline (step detail) --- */
+.sparkwrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px 6px;
+  margin-top: 10px;
+}
+.sparklabel { font-size: 0.72rem; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em; }
+.spark { display: block; margin-top: 4px; overflow: visible; }
+.spark polyline { fill: none; stroke: var(--area, var(--accent)); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark circle { fill: var(--area, var(--accent)); }
+.spark .spark-lbl { fill: var(--muted); font-size: 9px; font-weight: 650; }
+
+/* --- Stats pane --- */
+.statcards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.statcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.statcard .statval { font-size: 1.7rem; font-weight: 780; letter-spacing: -0.02em; }
+.statcard .statlab { font-size: 0.76rem; color: var(--muted); }
+
+.heatmap-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.heatmap { display: block; max-width: 100%; height: auto; }
+.hm-legend { display: flex; align-items: center; gap: 4px; justify-content: flex-end; font-size: 0.72rem; color: var(--muted); margin: 8px 2px 0; }
+.hm-l { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.hm-l0 { background: var(--grid); }
+.hm-l1 { background: color-mix(in srgb, var(--good) 43%, var(--surface)); }
+.hm-l2 { background: color-mix(in srgb, var(--good) 61%, var(--surface)); }
+.hm-l3 { background: color-mix(in srgb, var(--good) 79%, var(--surface)); }
+.hm-l4 { background: color-mix(in srgb, var(--good) 97%, var(--surface)); }
+
+.mlist { display: flex; flex-direction: column; gap: 8px; }
+.mrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.mrow .mswatch { width: 9px; height: 9px; border-radius: 50%; background: var(--area); flex: none; }
+.mrow .minfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.mrow .mtxt { font-weight: 650; font-size: 0.88rem; }
+.mrow .mdate { font-size: 0.74rem; color: var(--muted); }
+
+/* --- Routine preview (settings) --- */
+.routine-preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.rp-row { display: flex; gap: 12px; padding: 9px 12px; font-size: 0.85rem; background: var(--surface); }
+.rp-row + .rp-row { border-top: 1px solid var(--border); }
+.rp-row .rp-day { font-weight: 700; color: var(--ink-2); min-width: 48px; flex: none; }
+.rp-row .rp-moves { color: var(--ink); }
+
+/* --- History: make session rows editable --- */
+.hopen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+}
+
+/* --- QR code --- */
+.qrbox { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.qrbox:empty { display: none; }
+.qrbox canvas {
+  width: 220px;
+  height: 220px;
+  max-width: 100%;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  margin-top: 8px;
+}
+.qrcap { font-size: 0.78rem; color: var(--muted); text-align: center; margin: 0; }

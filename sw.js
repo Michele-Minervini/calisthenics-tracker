@@ -4,13 +4,14 @@
    offline and updates land on the next visit.
    Bump VERSION whenever any file changes, so clients pick up updates. */
 
-var VERSION = "bigsix-v5";
+var VERSION = "bigsix-v7";
 var ASSETS = [
   ".",
   "index.html",
   "style.css",
   "app.js",
   "data.js",
+  "qrcode.js",
   "manifest.webmanifest",
   "icons/icon-192.png",
   "icons/icon-512.png",
