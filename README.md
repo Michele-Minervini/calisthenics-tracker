@@ -14,10 +14,18 @@ Pushups — each organized as a ladder of ten progressively harder steps.
   on the chart to jump straight to that area's current exercise. Every step
   shows short instructions, Beginner / Intermediate / Progression rep goals,
   tips for when it's too hard, and a demo-video link.
-- Mark which goal you've met on your current step; when you hit the
-  Progression goal the app offers to move you up a step.
-- Progress is saved automatically in the browser (`localStorage`) — no account,
-  no server, no cost. Settings → backup link moves progress between devices.
+- **Log your workouts.** On any exercise, tap "Log a session", enter your sets
+  and reps (or hold time), and save. The app checks the result against the
+  goals and marks the standard you met automatically; when you hit the
+  Progression goal it offers to move you up a step.
+- **Rest timer.** One-tap presets (1/2/3/5 min) start a floating countdown that
+  keeps running while you browse other exercises and pings when it's done.
+- **Training history.** The calendar button (top of the screen) shows every
+  logged session, grouped by date, and each exercise shows its recent sessions.
+- Everything is saved automatically in the browser (`localStorage`) — no
+  account, no server, no cost. Settings gives you a quick progress **link**
+  (progress only) and a full **backup file** (progress + history) to move
+  between devices.
 - Works offline and can be installed on the iPhone home screen
   (Safari → Share → **Add to Home Screen**).
 
@@ -57,9 +65,9 @@ git push
 also bump `VERSION` in `sw.js`** (v1 → v2 → …) so phones that installed the
 app pick up the update.
 
-## Ideas for later (v2+)
+## Ideas for later (v3+)
 
-- Workout log: record each session (date, exercise, sets, reps) and show
-  history charts.
-- Weekly routine templates with per-day checklists.
-- Reminders, streaks, rest-timer between sets.
+- Progress history charts (a timeline of when you climbed each step; a "ghost"
+  radar of where you were months ago).
+- Weekly routine templates with per-day checklists and a "Today" view.
+- Consistency calendar / streaks; QR code for device transfer; reminders.

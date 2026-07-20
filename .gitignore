@@ -10,3 +10,6 @@ Thumbs.db
 
 # Local tooling
 .claude/
+
+# App-generated backup files
+bigsix-backup-*.json

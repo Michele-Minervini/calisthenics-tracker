@@ -582,3 +582,184 @@ footer.app a { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   #sheet, #scrim, #toast, .card, .track span i { transition: none !important; }
 }
+
+/* ============================================================
+   Tier 1: training log, history, rest timer
+   ============================================================ */
+
+.header-actions { display: flex; gap: 8px; }
+
+/* --- Log-training section inside the step detail --- */
+.recent { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.recent-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.recent-row .rdate { color: var(--muted); }
+.recent-row .rsets { color: var(--ink-2); font-weight: 600; }
+.muted-note { color: var(--muted); font-size: 0.82rem; margin: 10px 0 0; }
+
+/* --- Log pane --- */
+.logpane .goalref {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin: 2px 0 0;
+}
+.setlist { display: flex; flex-direction: column; gap: 8px; }
+.setrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px 8px 14px;
+}
+.setrow .setlabel { font-size: 0.82rem; font-weight: 650; color: var(--ink-2); min-width: 46px; }
+.setrow .setinput {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink);
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 6px;
+}
+.setrow .setinput:focus { outline: 2px solid var(--area, var(--accent)); outline-offset: -1px; border-color: transparent; }
+.setrow .setunit { font-size: 0.78rem; color: var(--muted); min-width: 42px; }
+.setrow .removeSet {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  flex: none;
+  border: 1px solid transparent;
+}
+.setrow .removeSet:active { background: var(--grid); }
+.btn.addset { margin-top: 10px; width: 100%; border-style: dashed; color: var(--ink-2); }
+
+.restrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.restpreset {
+  flex: 1;
+  min-width: 62px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 9px 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.restpreset:active { border-color: var(--area, var(--accent)); color: var(--ink); }
+
+.lognote {
+  width: 100%;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.lognote:focus { outline: 2px solid var(--area, var(--accent)); outline-offset: -1px; }
+
+/* Bigger inputs on touch screens so iOS doesn't zoom on focus */
+@media (hover: none) {
+  .setrow .setinput, .lognote { font-size: 16px; }
+}
+
+/* --- Backup buttons in settings --- */
+.btnrow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.btnrow .btn { flex: 1; min-width: 150px; }
+
+/* --- History pane --- */
+.history .empty { color: var(--muted); text-align: center; font-size: 0.9rem; padding: 30px 10px; line-height: 1.7; }
+.hgroup { margin-bottom: 18px; }
+.hdate {
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 2px 8px;
+}
+.hitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 10px 10px 12px;
+}
+.hitem + .hitem { margin-top: 8px; }
+.hitem .hswatch { width: 10px; height: 10px; border-radius: 50%; background: var(--area); flex: none; }
+.hitem .hinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hitem .hname { font-weight: 700; font-size: 0.9rem; }
+.hitem .hsets { font-size: 0.78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.hitem .hdel {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.95rem;
+  flex: none;
+}
+.hitem .hdel:active { background: var(--grid); color: var(--danger); }
+
+/* --- Floating rest-timer pill --- */
+#restpill {
+  position: fixed;
+  left: 50%;
+  /* Sit clear of both the toast (bottom 22px) and any bottom Save button. */
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 65;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  /* Theme-aware, high contrast in both modes (like the toast). */
+  background: var(--ink);
+  color: var(--page);
+  border-radius: 999px;
+  padding: 11px 16px 11px 20px;
+  font-size: 0.95rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow);
+}
+#restpill[hidden] { display: none !important; }
+#restpill .restx { opacity: 0.85; font-weight: 400; }
+#restpill.done { background: var(--good); color: var(--page); }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #restpill { transition: none !important; }
+}

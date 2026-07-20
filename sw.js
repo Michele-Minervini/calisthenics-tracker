@@ -4,7 +4,7 @@
    offline and updates land on the next visit.
    Bump VERSION whenever any file changes, so clients pick up updates. */
 
-var VERSION = "bigsix-v3";
+var VERSION = "bigsix-v5";
 var ASSETS = [
   ".",
   "index.html",
