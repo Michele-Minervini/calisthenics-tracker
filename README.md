@@ -55,7 +55,7 @@ No frameworks, no build step: edit a file, reload the page, that's it.
 Browsers restrict some features on files opened directly, so serve the folder:
 
 ```bash
-cd ~/Documents/Projects/Calisthenics
+cd ~/Documents/Projects/calisthenics-tracker
 python3 -m http.server 8642
 ```
 
