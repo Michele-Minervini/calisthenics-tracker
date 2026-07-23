@@ -894,6 +894,15 @@ button.today-card.setup .today-title { color: var(--accent); }
 .hm-l3 { background: var(--good); opacity: 0.72; }
 .hm-l4 { background: var(--good); }
 
+/* Trained days are tappable (opens that day's sessions). */
+.hm-cell { cursor: pointer; }
+.hm-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Don't leave a focus ring behind after a tap — only keyboard focus shows it. */
+.hm-cell:focus:not(:focus-visible) { outline: none; }
+@media (hover: hover) {
+  .hm-cell:hover { stroke: var(--ink); stroke-opacity: 0.4; stroke-width: 1.5; }
+}
+
 .mlist { display: flex; flex-direction: column; gap: 8px; }
 .mrow {
   display: flex;

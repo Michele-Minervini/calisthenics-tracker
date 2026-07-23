@@ -347,6 +347,12 @@
   function allSessionsSorted() {
     return state.log.slice().sort(function (a, b) { return b.ts - a.ts; });
   }
+  // Sessions on one calendar day, oldest-first. Keyed by dateStr(ts) so it lines
+  // up exactly with the heatmap, which groups by trainingDaySet().
+  function sessionsForDate(dateKey) {
+    return state.log.filter(function (e) { return dateStr(e.ts) === dateKey; })
+      .sort(function (a, b) { return a.ts - b.ts; });
+  }
   function setsSummary(e, step) {
     var unit = (step && step.timed) ? "sec" : "reps";
     if (e.sets.length === 1) return e.sets[0] + " " + unit;
@@ -880,7 +886,7 @@
   var openedAt = 0;
   var lastViewKey = null;
 
-  function sameView(v, w) { return !!w && v.t === w.t && v.a === w.a && v.s === w.s; }
+  function sameView(v, w) { return !!w && v.t === w.t && v.a === w.a && v.s === w.s && v.d === w.d; }
 
   function pushView(v) {
     // Dedupe: a double-tap must not stack two identical panes
@@ -901,6 +907,7 @@
 
   function openHistory() { pushView({ t: "history" }); }
   function openStats() { pushView({ t: "stats" }); }
+  function openDay(dateKey) { pushView({ t: "day", d: dateKey }); }
 
   // Draft for the in-progress log/edit form, so re-renders keep values.
   var logDraft = { key: "", sets: [], note: "", editId: null };
@@ -1016,7 +1023,7 @@
 
     var view = uiStack[uiStack.length - 1];
     // Re-rendering the same pane (e.g. after a chip tap) keeps the scroll position
-    var viewKey = view.t + ":" + (view.a != null ? view.a : "") + ":" + (view.s != null ? view.s : "");
+    var viewKey = view.t + ":" + (view.a != null ? view.a : "") + ":" + (view.s != null ? view.s : "") + ":" + (view.d != null ? view.d : "");
     var prevBody = $(".sheet-body", sheet);
     var keepScroll = (viewKey === lastViewKey && prevBody) ? prevBody.scrollTop : 0;
 
@@ -1024,6 +1031,7 @@
     else if (view.t === "step") sheet.innerHTML = stepPaneHTML(view.a, view.s);
     else if (view.t === "log") sheet.innerHTML = logPaneHTML(view.a, view.s);
     else if (view.t === "history") sheet.innerHTML = historyPaneHTML();
+    else if (view.t === "day") sheet.innerHTML = dayPaneHTML(view.d);
     else if (view.t === "stats") sheet.innerHTML = statsPaneHTML();
     else sheet.innerHTML = settingsPaneHTML();
     wireSheet(view);
@@ -1223,6 +1231,40 @@
       '<div class="sheet-body history">' + (sessions.length ? '<p class="muted-note">Tap a session to edit it.</p>' : "") + body + "</div>";
   }
 
+  /* ---------- Day pane (one calendar day, opened from the heatmap) ---------- */
+
+  function dayPaneHTML(dateKey) {
+    var sessions = sessionsForDate(dateKey);
+    // Fall back to the key itself for the header if the day emptied out (e.g. the
+    // last session was just deleted from this very pane).
+    var ts = sessions.length ? sessions[0].ts : dateFromKey(dateKey);
+    var n = sessions.length;
+    var body;
+    if (!n) {
+      body = '<p class="empty">No sessions logged on this day.</p>';
+    } else {
+      // Same row markup as the history pane, so a day's sessions are editable and
+      // deletable in place.
+      body = sessions.map(function (e) {
+        var a = AREAS[areaIndexById(e.areaId)];
+        var step = a.steps[e.step - 1];
+        return '<div class="hitem" style="--area:' + areaColorVar(a) + '">' +
+          '<button class="hopen" data-id="' + esc(e.id) + '">' +
+          '<span class="hswatch"></span>' +
+          '<span class="hinfo"><span class="hname">' + a.icon + " " + esc(step.name) + "</span>" +
+          '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
+          '<button class="hdel" data-id="' + esc(e.id) + '" aria-label="Delete this entry">&#128465;</button></div>';
+      }).join("");
+    }
+    return sheetHead({
+      title: "&#128197; " + esc(prettyDate(ts)),
+      sub: n ? (n + " session" + (n === 1 ? "" : "s")) : "",
+      back: true,
+      backLabel: "Progress"
+    }) +
+      '<div class="sheet-body history">' + (n ? '<p class="muted-note">Tap a session to edit it.</p>' : "") + body + "</div>";
+  }
+
   /* ---------- Sparkline (per-exercise, top set over time) ---------- */
 
   function sparklineSVG(entries) {
@@ -1277,7 +1319,13 @@
         var fillAttr = c === 0
           ? 'fill="var(--grid)"'
           : 'fill="var(--good)" fill-opacity="' + OPACITY[lvl] + '"';
-        rects += '<rect x="' + (w * cell) + '" y="' + (dd * cell) + '" width="' + size + '" height="' + size + '" rx="2" ' + fillAttr + '><title>' + key + ": " + c + " session" + (c === 1 ? "" : "s") + "</title></rect>";
+        // Only trained days are interactive: tap/Enter opens that day's sessions.
+        // Empty days stay inert so keyboard users don't tab through 180 blanks.
+        var interactive = c > 0
+          ? ' class="hm-cell" data-date="' + key + '" role="button" tabindex="0" aria-label="' +
+              esc(prettyDate(day.getTime()) + ": " + c + " session" + (c === 1 ? "" : "s") + ". View details.") + '"'
+          : "";
+        rects += '<rect x="' + (w * cell) + '" y="' + (dd * cell) + '" width="' + size + '" height="' + size + '" rx="2" ' + fillAttr + interactive + '><title>' + key + ": " + c + " session" + (c === 1 ? "" : "s") + "</title></rect>";
       }
     }
     return '<div class="heatmap-scroll"><svg class="heatmap" width="' + wpx + '" height="' + hpx + '" viewBox="0 0 ' + wpx + " " + hpx + '" role="img" aria-label="Training calendar, last 26 weeks">' + rects + "</svg></div>";
@@ -1312,6 +1360,7 @@
       cards +
       "<h4>Training calendar</h4>" + heatmapSVG() +
       '<p class="hm-legend">Less <span class="hm-l hm-l0"></span><span class="hm-l hm-l1"></span><span class="hm-l hm-l2"></span><span class="hm-l hm-l3"></span><span class="hm-l hm-l4"></span> More</p>' +
+      '<p class="muted-note">Tap a colored day to see what you trained.</p>' +
       "<h4>Milestones</h4>" + milestonesHTML() +
       "</div>";
   }
@@ -1443,7 +1492,8 @@
       if (saveBtn) saveBtn.addEventListener("click", function () { saveLog(la, ls); });
     }
 
-    if (view.t === "history") {
+    // The history pane and the per-day pane share the same session-row markup.
+    if (view.t === "history" || view.t === "day") {
       sheet.querySelectorAll(".hopen").forEach(function (b) {
         b.addEventListener("click", function () { openEditSession(b.getAttribute("data-id")); });
       });
@@ -1454,6 +1504,16 @@
             refresh();
             renderSheet();
           }
+        });
+      });
+    }
+
+    if (view.t === "stats") {
+      sheet.querySelectorAll(".hm-cell").forEach(function (r) {
+        var open = function () { openDay(r.getAttribute("data-date")); };
+        r.addEventListener("click", open);
+        r.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
         });
       });
     }
