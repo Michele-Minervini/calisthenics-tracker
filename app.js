@@ -70,11 +70,13 @@
       v: 4,
       areas: areas,
       log: [],
-      // ghostFrom: the day the "where I started" line measures from. Empty
-      // means "all of my history". It lives in settings rather than being done
-      // by deleting old snapshots, because a sync merge unions snapshots by day
-      // and would simply bring the deleted ones back from the other device.
-      settings: { restSeconds: DEFAULT_REST, ghostFrom: "" },
+      // ghostBase: a frozen { d, v } the "where I started" line measures from,
+      // or null for "all of my history". It's a copy rather than a pointer at a
+      // stored day because the day's snapshot keeps being rewritten as you
+      // train — and it lives in settings rather than being done by deleting old
+      // snapshots, because a sync merge unions snapshots by day and would just
+      // bring the deleted ones back from the other device.
+      settings: { restSeconds: DEFAULT_REST, ghostBase: null },
       routine: { enabled: false, daysPerWeek: 3, sessionIndex: 0 },
       snapshots: [],   // [{ d:"YYYY-MM-DD", v:[6 radar values] }] for the ghost radar
       milestones: [],  // [{ id, ts, type:"advance"|"master", areaId, step }]
@@ -147,9 +149,8 @@
     if (s.settings && typeof s.settings === "object") {
       var rs = Math.round(Number(s.settings.restSeconds));
       if (rs >= 5 && rs <= 3600) out.settings.restSeconds = rs;
-      if (typeof s.settings.ghostFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.settings.ghostFrom)) {
-        out.settings.ghostFrom = s.settings.ghostFrom;
-      }
+      // Same { d, v } shape as a snapshot, so the same validator does.
+      out.settings.ghostBase = sanitizeSnapshot(s.settings.ghostBase);
     }
     if (s.routine && typeof s.routine === "object") {
       var dpw = Math.round(Number(s.routine.daysPerWeek));
@@ -160,6 +161,17 @@
     }
     if (Array.isArray(s.snapshots)) {
       out.snapshots = s.snapshots.map(sanitizeSnapshot).filter(Boolean).slice(-400);
+    }
+    // The first version of this feature stored only a date and read the values
+    // back out of that day's snapshot; carry those settings over.
+    if (!out.settings.ghostBase && s.settings && typeof s.settings.ghostFrom === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(s.settings.ghostFrom)) {
+      for (var gi = 0; gi < out.snapshots.length; gi++) {
+        if (out.snapshots[gi].d >= s.settings.ghostFrom) {
+          out.settings.ghostBase = { d: out.snapshots[gi].d, v: out.snapshots[gi].v.slice() };
+          break;
+        }
+      }
     }
     if (Array.isArray(s.milestones)) {
       out.milestones = s.milestones.map(sanitizeMilestone).filter(Boolean).slice(-500);
@@ -425,19 +437,18 @@
   }
   // The oldest snapshot that actually differs from today's shape (else no ghost).
   function ghostSnapshot() {
-    var list = ghostRange();
-    if (list.length < 2) return null;
     var now = currentRadarVals();
-    var oldest = list[0];
-    var differs = oldest.v.some(function (x, i) { return Math.abs(x - now[i]) > 0.001; });
-    return differs ? oldest : null;
+    // A baseline you set yourself wins over the automatic one. Being frozen,
+    // it differs the moment you move a step — no waiting for the day to turn
+    // over, which a live snapshot of today would need.
+    var base = state.settings.ghostBase;
+    if (base) return differsFrom(base.v, now) ? base : null;
+    if (state.snapshots.length < 2) return null;
+    var oldest = state.snapshots[0];
+    return differsFrom(oldest.v, now) ? oldest : null;
   }
-  // The snapshots the ghost is allowed to look at. Dates are ISO, so a plain
-  // string comparison is a date comparison.
-  function ghostRange() {
-    var from = state.settings.ghostFrom;
-    if (!from) return state.snapshots;
-    return state.snapshots.filter(function (sn) { return sn.d >= from; });
+  function differsFrom(v, now) {
+    return v.some(function (x, i) { return Math.abs(x - now[i]) > 0.001; });
   }
 
   /* ---------- Milestones ---------- */
@@ -785,10 +796,29 @@
     var btn = $("#ghostToggle");
     if (!btn) return;
     var gs = ghostSnapshot();
-    if (!gs) { btn.hidden = true; ghostOn = false; return; }
-    btn.hidden = false;
-    btn.setAttribute("aria-pressed", ghostOn ? "true" : "false");
-    btn.textContent = ghostOn ? ("Hide start (" + shortDate(gs.d) + ")") : "Show where I started";
+    if (gs) {
+      btn.hidden = false;
+      btn.disabled = false;
+      btn.removeAttribute("title");
+      btn.setAttribute("aria-pressed", ghostOn ? "true" : "false");
+      btn.textContent = ghostOn ? ("Hide start (" + shortDate(gs.d) + ")") : "Show where I started";
+      return;
+    }
+    ghostOn = false;
+    var base = state.settings.ghostBase;
+    if (base) {
+      // You've set a starting point but haven't moved off it yet. Say that,
+      // rather than removing the control — a control that vanishes after you
+      // press a button reads as something having broken.
+      btn.hidden = false;
+      btn.disabled = true;
+      btn.removeAttribute("aria-pressed");
+      btn.textContent = "Starting point: " + shortDate(base.d);
+      btn.title = "The dashed line appears here as soon as you move up a step or meet a new standard.";
+      return;
+    }
+    btn.hidden = true;
+    btn.disabled = false;
   }
 
   function animateRadar() {
@@ -1434,19 +1464,17 @@
   // a new training block, when comparing against months ago stops being the
   // interesting comparison.
   function ghostSectionHTML() {
-    var from = state.settings.ghostFrom;
+    var base = state.settings.ghostBase;
     var oldest = state.snapshots.length ? state.snapshots[0].d : "";
     return "<h4>&#8220;Where I started&#8221; line</h4>" +
-      "<p>The dashed shape behind your chart is where you were on " +
-      (from ? "<strong>" + esc(shortDate(from)) + "</strong>, the day you last started over" :
+      "<p>The dashed shape behind your chart is the level you were at on " +
+      (base ? "<strong>" + esc(shortDate(base.d)) + "</strong>, the starting point you set" :
         (oldest ? "<strong>" + esc(shortDate(oldest)) + "</strong>, your first day in the app" : "your first day in the app")) +
-      ". Start over to measure your progress from today instead — your sessions, steps and history are untouched.</p>" +
-      '<div class="btnrow"><button class="btn" id="ghostResetBtn">&#8635; Start over from today</button>' +
-      (from ? '<button class="btn" id="ghostAllBtn">Use my whole history again</button>' : "") +
+      ". If those early numbers were a rough guess rather than a real measure, set today&#8217;s levels as the starting point instead — your sessions, steps and history are untouched.</p>" +
+      '<div class="btnrow"><button class="btn" id="ghostResetBtn">&#8635; Use today&#8217;s levels as the start</button>' +
+      (base ? '<button class="btn" id="ghostAllBtn">Go back to my first day</button>' : "") +
       "</div>" +
-      // The app keeps one snapshot per day, so today's is still being written
-      // to as you train. The comparison can only start from tomorrow.
-      (from ? "" : "<p>The line then goes away for the rest of today and comes back tomorrow, showing how far you&#8217;ve come since now.</p>");
+      "<p>The line is hidden while it would sit exactly on top of your current shape, and reappears the moment you move up a step.</p>";
   }
 
   // Two faces: an off state that walks you through the one-off setup, and an on
@@ -1691,23 +1719,24 @@
 
       var ghostReset = $("#ghostResetBtn", sheet);
       if (ghostReset) ghostReset.addEventListener("click", function () {
-        state.settings.ghostFrom = dateStr(nowMs());
+        // Freeze today's shape as the baseline.
+        state.settings.ghostBase = { d: dateStr(nowMs()), v: currentRadarVals() };
         touchPrefs();
-        recordSnapshot();   // make sure today has a snapshot to measure from; saves
+        saveState();
         ghostOn = false;
         refresh();
         renderSheet();
-        toast("Measuring from today ✓");
+        toast("Today's levels are now your starting point ✓");
       });
 
       var ghostAll = $("#ghostAllBtn", sheet);
       if (ghostAll) ghostAll.addEventListener("click", function () {
-        state.settings.ghostFrom = "";
+        state.settings.ghostBase = null;
         touchPrefs();
         saveState();
         refresh();
         renderSheet();
-        toast("Using your whole history again");
+        toast("Back to your first day");
       });
 
       sheet.querySelectorAll("[data-routine]").forEach(function (b) {

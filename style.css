@@ -853,6 +853,8 @@ button.today-card.setup .today-title { color: var(--accent); }
 }
 .ghostbtn[aria-pressed="true"] { border-color: var(--axis); color: var(--ink); }
 .ghostbtn[hidden] { display: none; }
+/* Set-but-nothing-to-show-yet: readable, clearly not a button to press. */
+.ghostbtn:disabled { color: var(--muted); border-style: dashed; cursor: default; }
 
 /* --- Sparkline (step detail) --- */
 .sparkwrap {
