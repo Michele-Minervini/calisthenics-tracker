@@ -1,16 +1,21 @@
 /* ============================================================
    Big Six Tracker — app logic
    Plain JavaScript, no dependencies.
-   State shape (v3, migrates from v1/v2 automatically):
+   State shape (v4, migrates from v1/v2/v3 automatically):
    {
-     v: 3,
-     areas: { [areaId]: { step: 1..10, std: 0..3 } },
-     log:   [ { id, ts, date:"YYYY-MM-DD", areaId, step, sets:[n,...], note } ],
+     v: 4,
+     areas: { [areaId]: { step: 1..10, std: 0..3, mts } },
+     log:   [ { id, ts, date:"YYYY-MM-DD", areaId, step, sets:[n,...], note, mts } ],
      settings: { restSeconds },
      routine: { enabled, daysPerWeek: 2|3|6, sessionIndex },
      snapshots: [ { d:"YYYY-MM-DD", v:[6 radar values] } ],   // ghost radar
-     milestones: [ { id, ts, type:"advance"|"master", areaId, step } ]
+     milestones: [ { id, ts, type:"advance"|"master", areaId, step } ],
+     deleted: [ { id, ts } ],   // tombstones for deleted sessions
+     prefsMts: 0                // last change to settings/routine
    }
+   The `mts` (modified-at) fields and `deleted` exist only for cloud sync
+   (sync.js): they let two devices be merged without losing or resurrecting
+   anything. Nothing in the UI reads them.
    std: 0 = working on it, 1 = beginner met, 2 = intermediate met,
         3 = progression (or elite) met.
    Radar value per area = (step - 1) + std / 3  →  0..10 rings filled.
@@ -60,15 +65,17 @@
 
   function defaultState() {
     var areas = {};
-    AREAS.forEach(function (a) { areas[a.id] = { step: 1, std: 0 }; });
+    AREAS.forEach(function (a) { areas[a.id] = { step: 1, std: 0, mts: 0 }; });
     return {
-      v: 3,
+      v: 4,
       areas: areas,
       log: [],
       settings: { restSeconds: DEFAULT_REST },
       routine: { enabled: false, daysPerWeek: 3, sessionIndex: 0 },
       snapshots: [],   // [{ d:"YYYY-MM-DD", v:[6 radar values] }] for the ghost radar
-      milestones: []   // [{ id, ts, type:"advance"|"master", areaId, step }]
+      milestones: [],  // [{ id, ts, type:"advance"|"master", areaId, step }]
+      deleted: [],     // [{ id, ts }] tombstones so a delete survives a sync merge
+      prefsMts: 0
     };
   }
 
@@ -102,6 +109,8 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
       storageOk = true;
+      // Single hook for cloud sync: every change to the state lands here.
+      scheduleSync();
       return true;
     } catch (e) {
       storageOk = false;
@@ -124,6 +133,8 @@
         var std = Math.round(Number(st.std));
         if (step >= 1 && step <= 10) out.areas[a.id].step = step;
         if (std >= 0 && std <= 3) out.areas[a.id].std = std;
+        var mts = Number(st.mts);
+        if (isFinite(mts) && mts > 0) out.areas[a.id].mts = mts;
       }
     });
     if (Array.isArray(s.log)) {
@@ -146,7 +157,20 @@
     if (Array.isArray(s.milestones)) {
       out.milestones = s.milestones.map(sanitizeMilestone).filter(Boolean).slice(-500);
     }
+    if (Array.isArray(s.deleted)) {
+      out.deleted = s.deleted.map(sanitizeTombstone).filter(Boolean).slice(-400);
+    }
+    var pm = Number(s.prefsMts);
+    if (isFinite(pm) && pm > 0) out.prefsMts = pm;
     return out;
+  }
+
+  function sanitizeTombstone(t) {
+    if (!t || typeof t !== "object") return null;
+    if (typeof t.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(t.id)) return null;
+    var ts = Number(t.ts);
+    if (!isFinite(ts) || ts <= 0) ts = nowMs();
+    return { id: t.id, ts: ts };
   }
 
   function sanitizeSnapshot(sn) {
@@ -186,7 +210,11 @@
     // Restrict ids to a safe charset so a hand-crafted backup can't inject markup.
     var id = (typeof e.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(e.id)) ? e.id : genId();
     var note = (typeof e.note === "string") ? e.note.slice(0, 280) : "";
-    return { id: id, ts: ts, date: date, areaId: e.areaId, step: step, sets: sets, note: note };
+    // Entries written before sync existed have no mts; treat the session time as
+    // their last edit, so a genuinely edited copy on another device wins.
+    var mts = Number(e.mts);
+    if (!isFinite(mts) || mts <= 0) mts = ts;
+    return { id: id, ts: ts, date: date, areaId: e.areaId, step: step, sets: sets, note: note, mts: mts };
   }
 
   var state = loadState();
@@ -331,13 +359,17 @@
 
   function addLogEntry(areaId, step, sets, note) {
     var ts = nowMs();
-    var entry = { id: genId(), ts: ts, date: dateStr(ts), areaId: areaId, step: step, sets: sets, note: note || "" };
+    var entry = { id: genId(), ts: ts, date: dateStr(ts), areaId: areaId, step: step, sets: sets, note: note || "", mts: ts };
     state.log.push(entry);
     saveState();
     return entry;
   }
   function deleteLogEntry(id) {
     state.log = state.log.filter(function (e) { return e.id !== id; });
+    // Remember the deletion. Without this, syncing with a device that still has
+    // the entry would quietly bring it back.
+    state.deleted.push({ id: id, ts: nowMs() });
+    if (state.deleted.length > 400) state.deleted = state.deleted.slice(-400);
     saveState();
   }
   function sessionsForStep(areaId, step) {
@@ -406,11 +438,16 @@
       if (!has) recordMilestone("master", areaId, 10);
     }
   }
+  // Stamp an area / the preferences as changed now, so a sync merge can tell
+  // which device's version of a conflicting value is the newer one.
+  function touchArea(areaId) { state.areas[areaId].mts = nowMs(); }
+  function touchPrefs() { state.prefsMts = nowMs(); }
+
   // Central point for changing an area's step/std so milestones are recorded once.
   function setAreaProgress(areaId, newStep, newStd) {
     var old = state.areas[areaId];
     var oldStep = old.step;
-    state.areas[areaId] = { step: newStep, std: newStd };
+    state.areas[areaId] = { step: newStep, std: newStd, mts: nowMs() };
     if (newStep > oldStep) {
       // Don't re-record a step already in the timeline (e.g. stepping back down
       // with "set as my current step" and then climbing again).
@@ -509,7 +546,7 @@
 
   function startRest(seconds) {
     restEnd = nowMs() + seconds * 1000;
-    if (state.settings.restSeconds !== seconds) { state.settings.restSeconds = seconds; saveState(); }
+    if (state.settings.restSeconds !== seconds) { state.settings.restSeconds = seconds; touchPrefs(); saveState(); }
     var sr = $("#sr-live"); if (sr) sr.textContent = ""; // reset so the next "complete" re-announces
     ensureAudio();
     var pill = $("#restpill");
@@ -557,10 +594,10 @@
   /* ---------- QR code for the backup link ---------- */
 
   // Returns true when a QR was actually drawn.
-  function renderQR(container) {
+  function renderQR(container, text, caption) {
     container.innerHTML = "";
     if (typeof QR === "undefined") { container.textContent = "QR generator unavailable."; return false; }
-    var m = QR.generate(shareURL());
+    var m = QR.generate(text);
     if (!m) { container.textContent = "Link is too long for a QR code."; return false; }
     var n = m.length, quiet = 4, scale = 6, px = (n + quiet * 2) * scale;
     var canvas = document.createElement("canvas");
@@ -576,7 +613,7 @@
     container.appendChild(canvas);
     var cap = document.createElement("p");
     cap.className = "qrcap";
-    cap.textContent = "Scan with the other device's camera to open your progress.";
+    cap.textContent = caption || "Scan with the other device's camera to open your progress.";
     container.appendChild(cap);
     return true;
   }
@@ -871,6 +908,7 @@
     if (ns) ns.addEventListener("click", function () {
       var sessions2 = routineSessions();
       state.routine.sessionIndex = (state.routine.sessionIndex + 1) % sessions2.length;
+      touchPrefs();
       saveState();
       renderToday();
       toast("Next session ready");
@@ -952,7 +990,7 @@
       var target = null;
       state.log.forEach(function (x) { if (x.id === logDraft.editId) target = x; });
       var savedOk = true;
-      if (target) { target.sets = sets; target.note = logDraft.note; savedOk = saveState(); }
+      if (target) { target.sets = sets; target.note = logDraft.note; target.mts = nowMs(); savedOk = saveState(); }
       logDraft = { key: "", sets: [], note: "", editId: null };
       refresh();
       goBack();
@@ -969,6 +1007,7 @@
       var det = detectStandard(step, sets);
       if (det > prevStd) {
         state.areas[a.id].std = det;
+        touchArea(a.id);
         checkMaster(a.id);
         saveState();
         recordSnapshot();
@@ -1376,6 +1415,28 @@
     }).join("");
   }
 
+  // Two faces: an off state that walks you through the one-off setup, and an on
+  // state that just reports and lets you add another device.
+  function syncSectionHTML() {
+    if (typeof SYNC === "undefined") return "";
+    var head = "<h4>Sync across your devices</h4>";
+    if (!syncCfg) {
+      return head +
+        "<p>Optional. Turn this on and every session you log shows up on your phone and your laptop by itself — no more passing backup files around. It stays free, and the app keeps working offline.</p>" +
+        "<p>Setting it up once means creating your own free database: see <strong>Cloud sync setup</strong> in the project README for the four steps. Then paste the database URL here.</p>" +
+        '<div class="copyrow"><input type="text" id="syncUrl" placeholder="https://&#8230;firebasedatabase.app" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="syncOnBtn">Turn on</button></div>' +
+        "<p>Already set it up on your other device? Scan the code it shows, or paste its sync link here.</p>" +
+        '<div class="copyrow"><input type="text" id="pairCode" placeholder="Paste a sync link from your other device&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="pairBtn">Connect</button></div>';
+    }
+    return head +
+      '<p id="syncStatus">' + esc(syncStatusText()) + "</p>" +
+      '<div class="btnrow"><button class="btn" id="syncNowBtn">&#8635; Sync now</button>' +
+      '<button class="btn" id="pairQrBtn">&#9636; Connect another device</button></div>' +
+      '<div id="pairbox" class="qrbox"></div>' +
+      "<p>Syncing happens by itself when you open the app and after you log a session.</p>" +
+      '<div class="btnrow"><button class="btn danger" id="syncOffBtn">Turn off sync on this device</button></div>';
+  }
+
   function settingsPaneHTML() {
     var url = shareURL();
     var routineChips = '<button class="chip' + (!state.routine.enabled ? " sel" : "") + '" data-routine="off">Off</button>' +
@@ -1388,8 +1449,11 @@
       "<p>Get a &#8220;today&#8217;s session&#8221; plan on the home screen. Pick how many days a week you train and the app spreads the six movements across them.</p>" +
       '<div class="chips">' + routineChips + "</div>" +
       '<div class="routine-preview">' + routinePreviewHTML() + "</div>" +
+      syncSectionHTML() +
       "<h4>Move progress between devices</h4>" +
-      "<p>Your progress lives only in this browser. To carry it to another device, copy this backup link and open it there — or paste a link from another device below.</p>" +
+      (syncCfg
+        ? "<p>You don&#8217;t need this while sync is on — it&#8217;s here for sending your progress to someone else, or to a device you don&#8217;t want to sync.</p>"
+        : "<p>Your progress lives only in this browser. To carry it to another device, copy this backup link and open it there — or paste a link from another device below.</p>") +
       '<div class="copyrow"><input type="text" readonly id="shareUrl" value="' + esc(url) + '"><button class="btn" id="copyBtn">Copy</button></div>' +
       '<div class="btnrow"><button class="btn" id="qrBtn">&#9636; Show QR code</button></div>' +
       '<div id="qrbox" class="qrbox"></div>' +
@@ -1408,6 +1472,73 @@
       "<h4>Danger zone</h4>" +
       '<button class="btn danger" id="resetBtn">Reset all progress</button>' +
       "</div>";
+  }
+
+  function wireSyncSection(sheet) {
+    if (typeof SYNC === "undefined") return;
+
+    var onBtn = $("#syncOnBtn", sheet);
+    if (onBtn) onBtn.addEventListener("click", function () {
+      var url = SYNC.normalizeURL($("#syncUrl", sheet).value);
+      if (!url) { toast("That doesn't look like a Firebase database URL"); return; }
+      // First device: it invents the secret code the others will be given.
+      startSync({ url: url, code: SYNC.makeCode(), lastSync: 0 }, "Sync turned on ✓");
+      renderSheet();
+    });
+
+    var pairBtn = $("#pairBtn", sheet);
+    if (pairBtn) pairBtn.addEventListener("click", function () {
+      var cfg = SYNC.parsePairing($("#pairCode", sheet).value);
+      if (!cfg) { toast("That doesn't look like a sync link"); return; }
+      startSync(cfg, "Device connected ✓");
+      renderSheet();
+    });
+
+    var nowBtn = $("#syncNowBtn", sheet);
+    if (nowBtn) nowBtn.addEventListener("click", function () { syncNow(true); });
+
+    var qrBtn = $("#pairQrBtn", sheet);
+    if (qrBtn) qrBtn.addEventListener("click", function () {
+      var box = $("#pairbox", sheet);
+      if (box.childNodes.length) { box.innerHTML = ""; this.innerHTML = "&#9636; Connect another device"; return; }
+      var link = location.origin + location.pathname + SYNC.pairingHash(syncCfg);
+      var drew = renderQR(box, link, "Scan this with your other device to connect it. Anyone who scans it can read and change your training data, so don't share it.");
+      if (drew) this.innerHTML = "&#9636; Hide the code";
+      // The text link is the fallback when a camera can't be pointed at a screen.
+      // (el() builds SVG nodes for the radar — this is plain HTML.)
+      var row = document.createElement("div");
+      row.className = "copyrow";
+      var input = document.createElement("input");
+      input.type = "text";
+      input.readOnly = true;
+      input.value = link;
+      var copy = document.createElement("button");
+      copy.className = "btn";
+      copy.textContent = "Copy";
+      copy.addEventListener("click", function () {
+        var fallback = function () {
+          input.select();
+          input.setSelectionRange(0, 99999);
+          var ok = false;
+          try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+          toast(ok ? "Sync link copied ✓" : "Copy failed — select the text and copy it manually");
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(link).then(function () { toast("Sync link copied ✓"); }, fallback);
+        } else { fallback(); }
+      });
+      row.appendChild(input);
+      row.appendChild(copy);
+      box.appendChild(row);
+    });
+
+    var offBtn = $("#syncOffBtn", sheet);
+    if (offBtn) offBtn.addEventListener("click", function () {
+      if (!confirm("Stop syncing on this device? Your training data stays here and stays in the cloud — they just stop updating each other.")) return;
+      stopSync();
+      renderSheet();
+      toast("Sync turned off");
+    });
   }
 
   /* ---------- Sheet chrome + wiring ---------- */
@@ -1442,6 +1573,7 @@
       sheet.querySelectorAll(".chip").forEach(function (c) {
         c.addEventListener("click", function () {
           state.areas[a.id].std = Number(c.getAttribute("data-std"));
+          touchArea(a.id);
           checkMaster(a.id);
           recordSnapshot(); // saves state (incl. any milestone)
           refresh();
@@ -1519,6 +1651,7 @@
     }
 
     if (view.t === "settings") {
+      wireSyncSection(sheet);
       sheet.querySelectorAll("[data-routine]").forEach(function (b) {
         b.addEventListener("click", function () {
           var val = b.getAttribute("data-routine");
@@ -1530,6 +1663,7 @@
             state.routine.enabled = true;
             state.routine.daysPerWeek = days;
           }
+          touchPrefs();
           saveState();
           renderToday();
           renderSheet();
@@ -1554,7 +1688,7 @@
         var box = $("#qrbox", sheet);
         if (box.childNodes.length) { box.innerHTML = ""; this.innerHTML = "&#9636; Show QR code"; }
         // Only flip to "Hide" if a code actually rendered.
-        else { this.innerHTML = renderQR(box) ? "&#9636; Hide QR code" : "&#9636; Show QR code"; }
+        else { this.innerHTML = renderQR(box, shareURL()) ? "&#9636; Hide QR code" : "&#9636; Show QR code"; }
       });
       $("#importBtn", sheet).addEventListener("click", function () {
         var incoming = decodeBackup($("#importCode", sheet).value);
@@ -1648,7 +1782,10 @@
   // preserving any training history already on this device.
   function applyImport(incoming) {
     AREAS.forEach(function (a) {
-      if (incoming.areas[a.id]) state.areas[a.id] = incoming.areas[a.id];
+      if (incoming.areas[a.id]) {
+        state.areas[a.id] = incoming.areas[a.id];
+        touchArea(a.id);
+      }
       // An imported position can already be a mastered area — record it so the
       // milestone timeline isn't silently missing it.
       checkMaster(a.id);
@@ -1687,6 +1824,160 @@
   // no page load happens, so catch it here too.
   window.addEventListener("hashchange", tryImportFromHash);
 
+  /* ---------- Cloud sync (optional — off until you set it up) ---------- */
+
+  var syncCfg = (typeof SYNC !== "undefined") ? SYNC.getConfig() : null;
+  var syncBusy = false;      // a round is in flight
+  var syncAgain = false;     // something changed while it was in flight
+  var syncErr = "";
+  var syncTimer = null;
+  var applyingSync = false;  // guards against a sync's own save re-triggering it
+
+  function syncOn() { return !!syncCfg; }
+
+  function logPaneOpen() {
+    var top = uiStack[uiStack.length - 1];
+    return !!top && top.t === "log";
+  }
+
+  // Every change goes through saveState(), so that is the only place this needs
+  // to be called from. The delay coalesces the burst of saves one action makes.
+  function scheduleSync() {
+    if (!syncCfg || applyingSync) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function () { syncNow(false); }, 2500);
+  }
+
+  function syncNow(manual) {
+    if (!syncCfg) return;
+    // Never re-render the log form out from under someone mid-entry.
+    if (!manual && logPaneOpen()) { syncAgain = true; return; }
+    if (syncBusy) { syncAgain = true; return; }
+    syncBusy = true;
+    syncAgain = false;
+    updateSyncUI();
+
+    syncRound(1).then(function (changed) {
+      syncBusy = false;
+      syncErr = "";
+      SYNC.markSynced(syncCfg, nowMs());
+      if (changed) {
+        refresh();
+        if (uiStack.length && !logPaneOpen()) renderSheet();
+      }
+      if (manual) toast(changed ? "Synced — new data pulled in ✓" : "Synced ✓");
+      updateSyncUI();
+      if (syncAgain && !logPaneOpen()) { syncAgain = false; syncNow(false); }
+    }, function (err) {
+      syncBusy = false;
+      syncErr = (err && err.message) ? err.message : "Sync failed.";
+      if (manual) toast(syncErr);
+      updateSyncUI();
+    });
+  }
+
+  // One pull → merge → push round. Resolves to true when the merge actually
+  // changed anything locally. `triesLeft` covers the compare-and-set retry.
+  function syncRound(triesLeft) {
+    return SYNC.pull(syncCfg).then(function (res) {
+      // Anything off the network is untrusted input: it goes through exactly
+      // the same validation as a restored backup file before it is merged.
+      var remote = res.raw ? sanitizeState(res.raw) : null;
+      var changed = false;
+
+      if (remote) {
+        var before = JSON.stringify(state);
+        var merged = sanitizeState(SYNC.merge(state, remote));
+        if (merged && JSON.stringify(merged) !== before) {
+          state = merged;
+          applyingSync = true;
+          saveState();
+          applyingSync = false;
+          displayVals = AREAS.map(function (a) { return areaValue(a.id); });
+          changed = true;
+        }
+      }
+
+      // Only spend a write when the cloud copy isn't already what we hold.
+      if (remote && JSON.stringify(remote) === JSON.stringify(state)) return changed;
+
+      return SYNC.push(syncCfg, state, res.etag).then(function () {
+        return changed;
+      }, function (err) {
+        // Another device wrote between our read and our write — take its
+        // version into account and try once more.
+        if (err && err.conflict && triesLeft > 0) return syncRound(triesLeft - 1);
+        throw err;
+      });
+    });
+  }
+
+  function syncStatusText() {
+    if (!syncCfg) return "";
+    if (syncBusy) return "Syncing…";
+    if (syncErr) return "Last attempt failed: " + syncErr;
+    if (!syncCfg.lastSync) return "Set up — not synced yet.";
+    return "Last synced " + agoText(syncCfg.lastSync) + ".";
+  }
+
+  function agoText(ts) {
+    var mins = Math.floor((nowMs() - ts) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+    var hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+    return "on " + dateStr(ts);
+  }
+
+  function updateSyncUI() {
+    var line = document.getElementById("syncStatus");
+    if (line) line.textContent = syncStatusText();
+    var btn = document.getElementById("syncNowBtn");
+    if (btn) btn.disabled = syncBusy;
+    var foot = document.getElementById("footNote");
+    if (foot) {
+      foot.textContent = syncCfg
+        ? "Your training data is saved on this device and synced to your other devices."
+        : "Your progress is stored only on this device. Use Settings → backup link to move it to another device.";
+    }
+  }
+
+  function startSync(cfg, msg) {
+    syncCfg = cfg;
+    syncErr = "";
+    if (!SYNC.setConfig(cfg)) { toast("Couldn't save the sync settings"); return; }
+    updateSyncUI();
+    toast(msg || "Sync turned on");
+    syncNow(true);
+  }
+
+  function stopSync() {
+    syncCfg = null;
+    syncErr = "";
+    clearTimeout(syncTimer);
+    SYNC.clearConfig();
+    updateSyncUI();
+  }
+
+  // Pairing arrives as a #sync=<database>,<code> fragment — normally by
+  // scanning the QR the first device shows.
+  function tryPairFromHash() {
+    if (typeof SYNC === "undefined") return;
+    if (!location.hash || location.hash.indexOf("#sync=") !== 0) return;
+    var cfg = SYNC.parsePairing(location.hash);
+    history.replaceState(null, "", location.pathname + location.search);
+    if (!cfg) { toast("That sync link isn't valid"); return; }
+    if (syncCfg && syncCfg.url === cfg.url && syncCfg.code === cfg.code) {
+      toast("This device is already synced");
+      return;
+    }
+    if (confirm("Sync this device with your other one? Your training data will be combined, not replaced.")) {
+      startSync(cfg, "Device connected ✓");
+    }
+  }
+
+  window.addEventListener("hashchange", tryPairFromHash);
+
   /* ---------- Refresh + boot ---------- */
 
   function refresh() {
@@ -1702,6 +1993,7 @@
   });
 
   tryImportFromHash();
+  tryPairFromHash();
   buildRadar();
   renderCards();
   renderToday();
@@ -1709,7 +2001,18 @@
   // stored data we failed to read, so a recoverable backup isn't destroyed.
   if (!loadFailed) recordSnapshot();
   updateGhostControl();
+  updateSyncUI();
   booted = true;
+
+  // Pull whatever the other device logged while this one was closed. Also on
+  // coming back to the tab, which on a phone is what "opening the app" is.
+  if (syncOn()) syncNow(false);
+  window.addEventListener("focus", function () { if (syncOn()) syncNow(false); });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && syncOn()) syncNow(false);
+  });
+  // A phone that was offline mid-workout should catch up as soon as it can.
+  window.addEventListener("online", function () { if (syncOn()) syncNow(false); });
 
   // Ask the browser to protect our saved data from automatic eviction
   if (navigator.storage && navigator.storage.persist) {

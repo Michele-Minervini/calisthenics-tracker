@@ -33,6 +33,8 @@ Pushups — each organized as a ladder of ten progressively harder steps.
   account, no server, no cost. Settings gives you a quick progress **link**
   (progress only, also as a scannable **QR code**) and a full **backup file**
   (progress + history) to move between devices.
+- **Optional cloud sync.** Turn it on once and your phone and laptop keep each
+  other up to date by themselves — see [Cloud sync setup](#cloud-sync-setup).
 - Works offline and can be installed on the iPhone home screen
   (Safari → Share → **Add to Home Screen**).
 
@@ -45,6 +47,8 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 | `data.js` | The content: all 60 exercises, descriptions, rep goals |
 | `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
 | `qrcode.js` | Self-contained QR-code generator (no dependencies) |
+| `sync.js` | Optional cloud sync: talks to your database, merges two devices |
+| `merge-test.js` | Checks the sync merge rules — run with `node merge-test.js` |
 | `sw.js` | Service worker — makes the app work offline |
 | `manifest.webmanifest` + `icons/` | App name/icon for "Add to Home Screen" |
 
@@ -60,6 +64,68 @@ python3 -m http.server 8642
 ```
 
 Then open http://localhost:8642 in your browser.
+
+## Cloud sync setup
+
+Optional, and off until you do this. It stays free: the app uses Firebase's
+no-cost Spark plan, which needs no credit card, and this app's data is a few
+tens of kilobytes against a 1 GB allowance.
+
+**Do this once, on a computer.**
+
+1. Go to [console.firebase.google.com](https://console.firebase.google.com) and
+   sign in with your Google account. Click **Create a project**, give it any
+   name (`bigsix` is fine), and turn Google Analytics **off** when it offers —
+   you don't need it.
+2. In the left sidebar open **Build → Realtime Database**, then
+   **Create Database**. Pick the location closest to you (`europe-west1`) and
+   choose **Start in locked mode** — the next step opens exactly the door you
+   need and nothing more.
+3. Open the **Rules** tab, replace everything with the block below, and click
+   **Publish**:
+
+   ```json
+   {
+     "rules": {
+       "u": {
+         "$code": {
+           ".read": "$code.length >= 20",
+           ".write": "$code.length >= 20",
+           "blob": { ".validate": "newData.isString() && newData.val().length <= 1000000" },
+           "updatedAt": { ".validate": "newData.isNumber()" },
+           "$other": { ".validate": false }
+         }
+       }
+     }
+   }
+   ```
+
+   (The editor checks the syntax when you publish, so you'll know straight away
+   if a character went missing in the copy.)
+
+4. At the top of the **Data** tab, copy the database URL. It looks like
+   `https://bigsix-1234-default-rtdb.europe-west1.firebasedatabase.app`.
+
+**Then, in the app.** Open Settings → *Sync across your devices*, paste that URL
+and press **Turn on**. The app invents a long random sync code and starts
+syncing. On your phone, open Settings → *Connect another device* on the first
+device and scan the QR code it shows — or paste the sync link. Both devices then
+keep themselves up to date.
+
+### What to know about it
+
+- **The sync code is the password.** Those rules let anyone who knows the code
+  read and write that one path — and nobody who doesn't. Guessing it is not
+  realistic (24 random characters), but don't post the QR anywhere public. To
+  revoke it, turn sync off on both devices and turn it back on: you get a new
+  code, and the old data can be deleted from the Firebase console.
+- **Your devices are never overwritten, they're merged.** Sessions logged on two
+  devices are combined, an edit beats an older copy, and a deleted session stays
+  deleted instead of coming back from the other device.
+- **Offline is unchanged.** `localStorage` is still the real store. Without a
+  network the app behaves exactly as before and catches up when it reconnects.
+- **It costs nothing to leave on.** A day of training is a handful of requests
+  against an allowance of 10 GB of downloads a month.
 
 ## Update the live site
 

@@ -9,13 +9,14 @@ the choices — so the context survives across work sessions.
 
 ## Where we are
 
-All three tiers are built, tested, and deployed (service worker `bigsix-v8`).
+All tiers are built, tested, and deployed (service worker `bigsix-v10`).
 
 | Tier | Shipped | What it added |
 |------|---------|---------------|
 | **Tier 0** | base | Six-axis radar ("star") chart, 10 rings each; step browser with per-exercise instructions, rep goals, and demo-video links; progress saved in the browser; backup via a shareable link. |
 | **Tier 1** | v5 | Log a session (sets/reps or hold time); auto-detection of the Beginner/Intermediate/Progression standard with a move-up prompt; global rest timer; training-history list; downloadable full backup file. |
 | **Tier 2** | v7–v8 | Weekly routine + "Today's session" card; smart nudge; ghost radar (past vs now); GitHub-style training heatmap; streaks; milestone timeline; per-exercise sparkline; edit a logged session; QR code for the backup link. |
+| **Tier 3** | v9–v10 | Day detail (tap a heatmap square for that day's sessions); **optional cloud sync** across devices, paired by QR. |
 
 Each tier went through an adversarial multi-agent review before shipping; the
 Tier 2 review caught a whole class of daylight-saving date bugs, now fixed and
@@ -23,9 +24,10 @@ regression-tested.
 
 ## Guiding principles (why the app is the way it is)
 
-- **Free, no accounts, no server, works offline.** Everything lives in the
-  browser (`localStorage`); hosting is GitHub Pages. This is a hard constraint,
-  not a default.
+- **Free, no accounts, works offline.** Everything lives in the browser
+  (`localStorage`); hosting is GitHub Pages. This is a hard constraint, not a
+  default. Cloud sync (below) is opt-in and doesn't bend it: still free, still
+  no account, and `localStorage` remains the real store.
 - **No build step, no frameworks.** Plain HTML/CSS/JS. Editing a file and
   reloading is the whole workflow — approachable to maintain.
 - **Generic calisthenics.** No references to any specific book or author,
@@ -37,8 +39,8 @@ regression-tested.
 
 - **Push notifications** — chose a gentle in-app nudge instead (real phone push
   is unreliable on iOS and needs the installed app + permissions).
-- **Cloud sync / accounts / any backend** — would break the free, no-account,
-  offline promise.
+- **User accounts, passwords, a server we run** — sync is done with a secret
+  code against your own free database instead.
 - **Any book/author references** — the app stands on its own.
 
 ## Offered but not chosen (easy to add later if wanted)
@@ -68,3 +70,12 @@ None committed — just a menu for later:
   silently drop or duplicate.
 - **The backup-link payload order is frozen** (`PAYLOAD_ORDER` in `app.js`) so
   old links keep importing correctly — never reuse the radar's axis order for it.
+- **Sync merges must stay commutative and idempotent.** Both devices run the
+  same `merge()` with no server to arbitrate, so `merge(a,b)` and `merge(b,a)`
+  have to produce byte-identical results — otherwise the two copies never
+  compare equal and the devices push at each other forever. Every sort inside
+  it falls back to the id for exactly this reason; a sort on timestamp alone is
+  not a total order. `merge-test.js` covers this.
+- **Anything arriving from the network goes through `sanitizeState()`** before
+  it is merged, same as a restored backup file. Treat the cloud copy as
+  untrusted input, because anyone holding the sync code can write to it.
