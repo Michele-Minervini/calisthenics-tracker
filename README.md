@@ -28,7 +28,8 @@ Pushups — each organized as a ladder of ten progressively harder steps.
   home screen shows today's session (ticks off as you log), plus a smart nudge
   when a movement is lagging.
 - **Ghost radar.** Toggle "Show where I started" to see your past shape behind
-  today's.
+  today's. Settings can re-zero that line to today — handy at the start of a new
+  training block — without touching your sessions or your steps.
 - Everything is saved automatically in the browser (`localStorage`) — no
   account, no server, no cost. Settings gives you a quick progress **link**
   (progress only, also as a scannable **QR code**) and a full **backup file**

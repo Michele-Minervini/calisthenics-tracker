@@ -70,7 +70,11 @@
       v: 4,
       areas: areas,
       log: [],
-      settings: { restSeconds: DEFAULT_REST },
+      // ghostFrom: the day the "where I started" line measures from. Empty
+      // means "all of my history". It lives in settings rather than being done
+      // by deleting old snapshots, because a sync merge unions snapshots by day
+      // and would simply bring the deleted ones back from the other device.
+      settings: { restSeconds: DEFAULT_REST, ghostFrom: "" },
       routine: { enabled: false, daysPerWeek: 3, sessionIndex: 0 },
       snapshots: [],   // [{ d:"YYYY-MM-DD", v:[6 radar values] }] for the ghost radar
       milestones: [],  // [{ id, ts, type:"advance"|"master", areaId, step }]
@@ -143,6 +147,9 @@
     if (s.settings && typeof s.settings === "object") {
       var rs = Math.round(Number(s.settings.restSeconds));
       if (rs >= 5 && rs <= 3600) out.settings.restSeconds = rs;
+      if (typeof s.settings.ghostFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.settings.ghostFrom)) {
+        out.settings.ghostFrom = s.settings.ghostFrom;
+      }
     }
     if (s.routine && typeof s.routine === "object") {
       var dpw = Math.round(Number(s.routine.daysPerWeek));
@@ -418,11 +425,19 @@
   }
   // The oldest snapshot that actually differs from today's shape (else no ghost).
   function ghostSnapshot() {
-    if (state.snapshots.length < 2) return null;
+    var list = ghostRange();
+    if (list.length < 2) return null;
     var now = currentRadarVals();
-    var oldest = state.snapshots[0];
+    var oldest = list[0];
     var differs = oldest.v.some(function (x, i) { return Math.abs(x - now[i]) > 0.001; });
     return differs ? oldest : null;
+  }
+  // The snapshots the ghost is allowed to look at. Dates are ISO, so a plain
+  // string comparison is a date comparison.
+  function ghostRange() {
+    var from = state.settings.ghostFrom;
+    if (!from) return state.snapshots;
+    return state.snapshots.filter(function (sn) { return sn.d >= from; });
   }
 
   /* ---------- Milestones ---------- */
@@ -1415,6 +1430,25 @@
     }).join("");
   }
 
+  // Lets you re-zero the dashed "where I started" line — useful at the start of
+  // a new training block, when comparing against months ago stops being the
+  // interesting comparison.
+  function ghostSectionHTML() {
+    var from = state.settings.ghostFrom;
+    var oldest = state.snapshots.length ? state.snapshots[0].d : "";
+    return "<h4>&#8220;Where I started&#8221; line</h4>" +
+      "<p>The dashed shape behind your chart is where you were on " +
+      (from ? "<strong>" + esc(shortDate(from)) + "</strong>, the day you last started over" :
+        (oldest ? "<strong>" + esc(shortDate(oldest)) + "</strong>, your first day in the app" : "your first day in the app")) +
+      ". Start over to measure your progress from today instead — your sessions, steps and history are untouched.</p>" +
+      '<div class="btnrow"><button class="btn" id="ghostResetBtn">&#8635; Start over from today</button>' +
+      (from ? '<button class="btn" id="ghostAllBtn">Use my whole history again</button>' : "") +
+      "</div>" +
+      // The app keeps one snapshot per day, so today's is still being written
+      // to as you train. The comparison can only start from tomorrow.
+      (from ? "" : "<p>The line then goes away for the rest of today and comes back tomorrow, showing how far you&#8217;ve come since now.</p>");
+  }
+
   // Two faces: an off state that walks you through the one-off setup, and an on
   // state that just reports and lets you add another device.
   function syncSectionHTML() {
@@ -1450,6 +1484,7 @@
       "<p>Get a &#8220;today&#8217;s session&#8221; plan on the home screen. Pick how many days a week you train and the app spreads the six movements across them.</p>" +
       '<div class="chips">' + routineChips + "</div>" +
       '<div class="routine-preview">' + routinePreviewHTML() + "</div>" +
+      ghostSectionHTML() +
       syncSectionHTML() +
       "<h4>Move progress between devices</h4>" +
       (syncCfg
@@ -1653,6 +1688,28 @@
 
     if (view.t === "settings") {
       wireSyncSection(sheet);
+
+      var ghostReset = $("#ghostResetBtn", sheet);
+      if (ghostReset) ghostReset.addEventListener("click", function () {
+        state.settings.ghostFrom = dateStr(nowMs());
+        touchPrefs();
+        recordSnapshot();   // make sure today has a snapshot to measure from; saves
+        ghostOn = false;
+        refresh();
+        renderSheet();
+        toast("Measuring from today ✓");
+      });
+
+      var ghostAll = $("#ghostAllBtn", sheet);
+      if (ghostAll) ghostAll.addEventListener("click", function () {
+        state.settings.ghostFrom = "";
+        touchPrefs();
+        saveState();
+        refresh();
+        renderSheet();
+        toast("Using your whole history again");
+      });
+
       sheet.querySelectorAll("[data-routine]").forEach(function (b) {
         b.addEventListener("click", function () {
           var val = b.getAttribute("data-routine");
