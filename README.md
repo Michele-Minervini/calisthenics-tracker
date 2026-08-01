@@ -103,8 +103,16 @@ tens of kilobytes against a 1 GB allowance.
    (The editor checks the syntax when you publish, so you'll know straight away
    if a character went missing in the copy.)
 
-4. At the top of the **Data** tab, copy the database URL. It looks like
-   `https://bigsix-1234-default-rtdb.europe-west1.firebasedatabase.app`.
+4. Go back to the **Data** tab. The line at the top, next to the 🔗 icon, *is*
+   the database URL — copy that whole line. It ends in either of two ways
+   depending on the region you picked, and both work:
+
+   ```text
+   https://bigsix-abbe9-default-rtdb.firebaseio.com
+   https://bigsix-1234-default-rtdb.europe-west1.firebasedatabase.app
+   ```
+
+   (A trailing `/` is fine — the app trims it.)
 
 **Then, in the app.** Open Settings → *Sync across your devices*, paste that URL
 and press **Turn on**. The app invents a long random sync code and starts

@@ -1424,7 +1424,8 @@
       return head +
         "<p>Optional. Turn this on and every session you log shows up on your phone and your laptop by itself — no more passing backup files around. It stays free, and the app keeps working offline.</p>" +
         "<p>Setting it up once means creating your own free database: see <strong>Cloud sync setup</strong> in the project README for the four steps. Then paste the database URL here.</p>" +
-        '<div class="copyrow"><input type="text" id="syncUrl" placeholder="https://&#8230;firebasedatabase.app" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="syncOnBtn">Turn on</button></div>' +
+        '<div class="copyrow"><input type="text" id="syncUrl" placeholder="Paste your database URL&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="syncOnBtn">Turn on</button></div>' +
+        "<p>It&#8217;s the address shown at the top of the database&#8217;s <em>Data</em> tab. Depending on the region you picked it ends in either <code>firebaseio.com</code> or <code>firebasedatabase.app</code> — both are fine.</p>" +
         "<p>Already set it up on your other device? Scan the code it shows, or paste its sync link here.</p>" +
         '<div class="copyrow"><input type="text" id="pairCode" placeholder="Paste a sync link from your other device&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="pairBtn">Connect</button></div>';
     }
