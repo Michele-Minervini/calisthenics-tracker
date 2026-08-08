@@ -534,6 +534,48 @@ main.layout {
 /* Settings */
 
 .settings p { font-size: 0.88rem; color: var(--ink-2); margin: 6px 0; }
+.settings .hint { font-size: 0.8rem; color: var(--muted); }
+
+/* Something is wrong with saving — has to read as a warning, not as body copy. */
+.settings .warn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--ink);
+}
+
+/* Rarely-needed and destructive bits, collapsed by default. */
+.settings details { margin-top: 20px; border-top: 1px solid var(--border); }
+.settings summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 2px 4px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  list-style: none;
+}
+.settings summary::-webkit-details-marker { display: none; }
+.settings summary::before {
+  content: "\25B8";
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.settings details[open] summary::before { transform: rotate(90deg); }
+.settings summary:hover { color: var(--ink-2); }
+.settings .more-body { padding-bottom: 4px; }
+.settings h5 {
+  margin: 18px 0 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--ink);
+}
 .copyrow { display: flex; gap: 8px; margin-top: 8px; }
 .copyrow input {
   flex: 1;

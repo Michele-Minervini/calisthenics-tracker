@@ -1466,15 +1466,13 @@
   function ghostSectionHTML() {
     var base = state.settings.ghostBase;
     var oldest = state.snapshots.length ? state.snapshots[0].d : "";
+    var day = base ? shortDate(base.d) : (oldest ? shortDate(oldest) : "");
     return "<h4>&#8220;Where I started&#8221; line</h4>" +
-      "<p>The dashed shape behind your chart is the level you were at on " +
-      (base ? "<strong>" + esc(shortDate(base.d)) + "</strong>, the starting point you set" :
-        (oldest ? "<strong>" + esc(shortDate(oldest)) + "</strong>, your first day in the app" : "your first day in the app")) +
-      ". If those early numbers were a rough guess rather than a real measure, set today&#8217;s levels as the starting point instead — your sessions, steps and history are untouched.</p>" +
-      '<div class="btnrow"><button class="btn" id="ghostResetBtn">&#8635; Use today&#8217;s levels as the start</button>' +
-      (base ? '<button class="btn" id="ghostAllBtn">Go back to my first day</button>' : "") +
-      "</div>" +
-      "<p>The line is hidden while it would sit exactly on top of your current shape, and reappears the moment you move up a step.</p>";
+      "<p>The dashed shape on your chart is your level" +
+      (day ? " on <strong>" + esc(day) + "</strong>" : " on your first day") + ".</p>" +
+      '<div class="btnrow"><button class="btn" id="ghostResetBtn">&#8635; Start from today&#8217;s levels</button>' +
+      (base ? '<button class="btn" id="ghostAllBtn">Back to my first day</button>' : "") +
+      "</div>";
   }
 
   // Two faces: an off state that walks you through the one-off setup, and an on
@@ -1484,20 +1482,17 @@
     var head = "<h4>Sync across your devices</h4>";
     if (!syncCfg) {
       return head +
-        "<p>Optional. Turn this on and every session you log shows up on your phone and your laptop by itself — no more passing backup files around. It stays free, and the app keeps working offline.</p>" +
-        "<p>Setting it up once means creating your own free database: see <strong>Cloud sync setup</strong> in the project README for the four steps. Then paste the database URL here.</p>" +
+        "<p>Log a session on your phone, see it on your laptop. Free, and the app still works offline.</p>" +
         '<div class="copyrow"><input type="text" id="syncUrl" placeholder="Paste your database URL&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="syncOnBtn">Turn on</button></div>' +
-        "<p>It&#8217;s the address shown at the top of the database&#8217;s <em>Data</em> tab. Depending on the region you picked it ends in either <code>firebaseio.com</code> or <code>firebasedatabase.app</code> — both are fine.</p>" +
-        "<p>Already set it up on your other device? Scan the code it shows, or paste its sync link here.</p>" +
-        '<div class="copyrow"><input type="text" id="pairCode" placeholder="Paste a sync link from your other device&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="pairBtn">Connect</button></div>';
+        '<p class="hint">One-off setup: make your own free database — four steps, under <strong>Cloud sync setup</strong> in the README — then paste the address from its <em>Data</em> tab above.</p>' +
+        '<div class="copyrow"><input type="text" id="pairCode" placeholder="&#8230;or paste a sync link" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="pairBtn">Connect</button></div>';
     }
     return head +
       '<p id="syncStatus">' + esc(syncStatusText()) + "</p>" +
       '<div class="btnrow"><button class="btn" id="syncNowBtn">&#8635; Sync now</button>' +
       '<button class="btn" id="pairQrBtn">&#9636; Connect another device</button></div>' +
       '<div id="pairbox" class="qrbox"></div>' +
-      "<p>Syncing happens by itself when you open the app and after you log a session.</p>" +
-      '<div class="btnrow"><button class="btn danger" id="syncOffBtn">Turn off sync on this device</button></div>';
+      '<p class="hint">Happens by itself when you open the app and after you log a session.</p>';
   }
 
   function settingsPaneHTML() {
@@ -1506,35 +1501,41 @@
       [2, 3, 6].map(function (d) {
         return '<button class="chip' + ((state.routine.enabled && state.routine.daysPerWeek === d) ? " sel" : "") + '" data-routine="' + d + '">' + d + " days/week</button>";
       }).join("");
-    return sheetHead({ title: "&#9881;&#65039; Settings &amp; backup", sub: "", back: false }) +
+    // Anything wrong with saving goes first — it's the one thing here that
+    // can't wait to be scrolled to.
+    var warnings =
+      (storageOk ? "" : '<p class="warn"><strong>Saving isn&#8217;t working</strong> in this browser (storage blocked, or full). Changes will be lost when you close the tab — download a backup file now.</p>') +
+      (loadFailed ? '<p class="warn"><strong>The data on this device couldn&#8217;t be read</strong>, so the app started empty. Nothing has been overwritten yet — restore a backup file before logging anything new.</p>' : "");
+
+    return sheetHead({ title: "&#9881;&#65039; Settings", sub: "", back: false }) +
       '<div class="sheet-body settings">' +
+      warnings +
       "<h4>Weekly routine</h4>" +
-      "<p>Get a &#8220;today&#8217;s session&#8221; plan on the home screen. Pick how many days a week you train and the app spreads the six movements across them.</p>" +
+      "<p>Pick how many days a week you train; the app spreads the six movements across them and shows today&#8217;s session on the home screen.</p>" +
       '<div class="chips">' + routineChips + "</div>" +
       '<div class="routine-preview">' + routinePreviewHTML() + "</div>" +
-      ghostSectionHTML() +
       syncSectionHTML() +
-      "<h4>Move progress between devices</h4>" +
-      (syncCfg
-        ? "<p>You don&#8217;t need this while sync is on — it&#8217;s here for sending your progress to someone else, or to a device you don&#8217;t want to sync.</p>"
-        : "<p>Your progress lives only in this browser. To carry it to another device, copy this backup link and open it there — or paste a link from another device below.</p>") +
+      ghostSectionHTML() +
+      "<h4>Backup</h4>" +
+      "<p>A file with everything — your steps and every session you&#8217;ve logged.</p>" +
+      '<div class="btnrow"><button class="btn" id="downloadBtn">&#11015; Download backup</button><button class="btn" id="restoreBtn">&#11014; Restore from file</button></div>' +
+      '<input type="file" id="restoreFile" accept="application/json,.json" hidden>' +
+      // The rest is either rarely needed or destructive. Collapsed by default
+      // with a plain <details> — no JavaScript, and nothing is taken away.
+      "<details><summary>More</summary>" +
+      '<div class="more-body">' +
+      "<p>Browsers can clear data for sites you haven&#8217;t opened in a while, so keep a backup file somewhere safe. On iPhone, the home-screen app holds onto data more reliably than a Safari tab.</p>" +
+      "<h5>Progress link</h5>" +
+      "<p>Carries your six step numbers only — no sessions, no history. The backup file above is better for moving to a new device; this is for sending someone your positions.</p>" +
       '<div class="copyrow"><input type="text" readonly id="shareUrl" value="' + esc(url) + '"><button class="btn" id="copyBtn">Copy</button></div>' +
       '<div class="btnrow"><button class="btn" id="qrBtn">&#9636; Show QR code</button></div>' +
       '<div id="qrbox" class="qrbox"></div>' +
-      '<div class="copyrow"><input type="text" id="importCode" placeholder="Paste a backup link from another device&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="importBtn">Import</button></div>' +
-      "<p>The link carries your progress only (which step you're on). For your full training history, use the file backup below.</p>" +
-      "<h4>Full backup (progress + history)</h4>" +
-      "<p>Download a file with everything, including your logged sessions. Keep it somewhere safe, and restore it here on any device.</p>" +
-      '<div class="btnrow"><button class="btn" id="downloadBtn">&#11015; Download backup file</button><button class="btn" id="restoreBtn">&#11014; Restore from file</button></div>' +
-      '<input type="file" id="restoreFile" accept="application/json,.json" hidden>' +
-      "<p>Tip: browsers sometimes clear data for sites you haven't visited in a while, so back up every so often. On iPhone, the installed home-screen app keeps data more reliably than a Safari tab.</p>" +
-      "<h4>About</h4>" +
-      "<p>Big Six Tracker follows ten-step progressions for the six fundamental bodyweight movements: pushups, squats, pullups, leg raises, bridges and handstand pushups. Each step has three goals — Beginner, Intermediate and Progression.</p>" +
-      "<p>Rule of thumb: warm up, work hard on your current step, and only move up once you hit the Progression standard with clean, controlled form.</p>" +
-      (storageOk ? "" : "<p><strong>Heads up:</strong> saving isn't working in this browser (storage blocked, or full). Changes will be lost when you close the tab — download a backup file now.</p>") +
-      (loadFailed ? "<p><strong>Heads up:</strong> the progress stored on this device couldn't be read, so the app started empty. Nothing has been overwritten yet — if you have a backup file, restore it before logging anything new.</p>" : "") +
-      "<h4>Danger zone</h4>" +
-      '<button class="btn danger" id="resetBtn">Reset all progress</button>' +
+      '<div class="copyrow"><input type="text" id="importCode" placeholder="Paste a progress link&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="importBtn">Import</button></div>' +
+      "<h5>Start over</h5>" +
+      '<div class="btnrow">' +
+      (syncCfg ? '<button class="btn danger" id="syncOffBtn">Turn off sync here</button>' : "") +
+      '<button class="btn danger" id="resetBtn">Reset all progress</button></div>' +
+      "</div></details>" +
       "</div>";
   }
 
@@ -1763,10 +1764,10 @@
           input.setSelectionRange(0, 99999);
           var ok = false;
           try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
-          toast(ok ? "Backup link copied ✓" : "Copy failed — select the text and copy it manually");
+          toast(ok ? "Progress link copied ✓" : "Copy failed — select the text and copy it manually");
         };
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(input.value).then(function () { toast("Backup link copied ✓"); }, fallback);
+          navigator.clipboard.writeText(input.value).then(function () { toast("Progress link copied ✓"); }, fallback);
         } else {
           fallback();
         }
@@ -1779,7 +1780,7 @@
       });
       $("#importBtn", sheet).addEventListener("click", function () {
         var incoming = decodeBackup($("#importCode", sheet).value);
-        if (!incoming) { toast("That doesn't look like a valid backup link"); return; }
+        if (!incoming) { toast("That doesn't look like a progress link"); return; }
         if (confirm("Import this progress? It will replace the progress saved on this device.")) {
           applyImport(incoming);
           renderSheet();
@@ -1900,7 +1901,7 @@
       history.replaceState(null, "", location.pathname + location.search);
       return;
     }
-    if (confirm("Import progress from this backup link? It will replace the progress saved on this device.")) {
+    if (confirm("Import progress from this link? It will replace the progress saved on this device — your logged sessions are kept.")) {
       applyImport(incoming);
       history.replaceState(null, "", location.pathname + location.search);
     }
