@@ -998,3 +998,235 @@ button.today-card.setup .today-title { color: var(--accent); }
   margin-top: 8px;
 }
 .qrcap { font-size: 0.78rem; color: var(--muted); text-align: center; margin: 0; }
+
+/* ==========================================================
+   The plan: today's prescription, the guided session,
+   the week map, and the exercise library.
+   ========================================================== */
+
+/* --- Today's card additions --- */
+.td-move .tdready {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--area);
+  margin-top: 2px;
+}
+.today-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 10px;
+}
+.tdlink {
+  flex: 1;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  text-align: center;
+  cursor: pointer;
+}
+.tdlink:hover { color: var(--ink); }
+
+/* --- Guided session --- */
+.sdots { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.sdot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--axis);
+}
+.sdot.done { background: var(--area); border-color: var(--area); }
+.sdot.now { box-shadow: 0 0 0 3px var(--grid); border-color: var(--area); }
+.scount { margin-left: auto; font-size: 0.74rem; color: var(--muted); font-weight: 650; }
+
+/* The one line that says what to do — deliberately the loudest thing here. */
+.rx {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--area);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.rxlabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rxbig { font-size: 1.5rem; font-weight: 750; color: var(--ink); line-height: 1.15; }
+.rxgoal { font-size: 0.8rem; color: var(--ink-2); }
+
+.session .cues { margin: 4px 0 0; padding-left: 20px; }
+.session .cues li { font-size: 0.86rem; color: var(--ink-2); margin: 4px 0; }
+.session .hint, .sheet-body .hint { font-size: 0.8rem; color: var(--muted); }
+.sactions { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Swap options */
+.swaps { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 8px; }
+.swaps summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  padding: 4px 0;
+  list-style: none;
+}
+.swaps summary::-webkit-details-marker { display: none; }
+.swaps summary::before { content: "\25B8"; display: inline-block; margin-right: 7px; }
+.swaps[open] summary::before { content: "\25BE"; }
+.swap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  cursor: pointer;
+}
+.swapname { font-weight: 700; font-size: 0.88rem; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.swapwhy { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+.swaptag {
+  font-size: 0.6rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 6px;
+  padding: 1.5px 6px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.swaptag.easier { color: var(--muted); }
+.swaptag.same { color: var(--ink-2); }
+.swaptag.harder { color: var(--danger); }
+
+/* Session complete */
+.bigdone { font-size: 2.6rem; text-align: center; margin: 6px 0 2px; }
+.donelist { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.donerow {
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.doneicon {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--area);
+  color: var(--surface);
+  display: grid; place-items: center;
+  font-size: 0.72rem; font-weight: 800;
+}
+.doneinfo { min-width: 0; display: flex; flex-direction: column; }
+.donename { font-weight: 700; font-size: 0.88rem; }
+.donesets { font-size: 0.74rem; color: var(--muted); }
+
+/* --- The week --- */
+.wkdays { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 4px; }
+.wkday {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.wkday.now { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.wkhead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.wkdaylabel { font-weight: 750; font-size: 0.84rem; }
+.wknow {
+  font-size: 0.6rem; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase;
+  background: var(--accent); color: var(--btn-ink); border-radius: 6px; padding: 1.5px 6px;
+}
+.wkmove { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 8px; padding: 3px 0; }
+.wkdot { width: 8px; height: 8px; border-radius: 50%; background: var(--area); }
+.wkname { font-size: 0.84rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wkrx { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+
+.mapgrid { display: flex; flex-direction: column; gap: 10px; }
+.mapcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--area);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.maphead { font-weight: 750; font-size: 0.9rem; }
+.mapnow { font-size: 0.8rem; color: var(--ink-2); margin-top: 2px; }
+.mapneed { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+.maplabel {
+  font-size: 0.62rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); margin-top: 8px;
+}
+.mapahead { margin: 2px 0 0; padding-left: 18px; }
+.mapahead li { font-size: 0.78rem; color: var(--ink-2); margin: 2px 0; }
+
+/* --- Library --- */
+.librows { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.librow {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--area);
+  border-radius: 14px;
+  padding: 11px 12px;
+  cursor: pointer;
+}
+.libicon { font-size: 1.3rem; }
+.libinfo { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.libname { font-weight: 750; font-size: 0.94rem; }
+.libsub { font-size: 0.76rem; color: var(--muted); }
+.libwhere { font-size: 0.76rem; color: var(--area); font-weight: 650; margin-top: 2px; }
+
+/* --- Ladder rows now carry the description and all three goals --- */
+.rung .info .tg { white-space: normal; overflow: visible; line-height: 1.35; margin-top: 2px; }
+.rung .info .goals { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.goalpill {
+  font-size: 0.7rem;
+  color: var(--ink-2);
+  background: var(--grid);
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.goalpill b { color: var(--area); }
+.rung .info .tgnote { font-size: 0.7rem; color: var(--muted); margin-top: 4px; display: block; }
+.rung { align-items: start; }
+.rung .num, .rung .chev { margin-top: 2px; }
+
+/* --- Variations listed under a ladder --- */
+.varlist { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.varcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.varname { font-weight: 700; font-size: 0.86rem; display: flex; align-items: center; gap: 7px; }
+.varwhy { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: 3px; }
+
+/* --- Variation picker in the log form --- */
+h4.tight { margin-bottom: 2px; }
+.vnote { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: 6px; }

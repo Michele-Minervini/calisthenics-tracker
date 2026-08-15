@@ -27,6 +27,20 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 - **Weekly routine + Today card.** Pick a 2/3/6-day split in Settings and the
   home screen shows today's session (ticks off as you log), plus a smart nudge
   when a movement is lagging.
+- **It tells you what to do.** Every movement comes with a prescription — the
+  exercise, the sets and reps, and which standard you're chasing — worked out
+  from where you are right now. Move up a step and the next screen already asks
+  for the new exercise's numbers; there is no plan to regenerate.
+- **Guided sessions.** "Start session" walks you through the workout one
+  movement at a time: warm-up, prescription, form cues, log it, rest, next.
+  Close the app mid-workout and it resumes where you left off.
+- **Swaps.** Each step offers alternatives that fit it — negatives, paused and
+  tempo reps, grip changes, holds. Easier ones are marked *practice*: they get
+  logged, but they can't award a standard you didn't earn.
+- **Exercise library.** Every area's ten steps in one list, each with what it
+  trains and the reps and sets for all three standards.
+- **This week.** The whole rotation at a glance, plus what each area needs next
+  and the rungs beyond it.
 - **Ghost radar.** Toggle "Show where I started" to see your past shape behind
   today's. Settings can re-zero that line to today — handy at the start of a new
   training block — without touching your sessions or your steps.
@@ -45,7 +59,7 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 |------|------|
 | `index.html` | The page skeleton |
 | `style.css` | All styling (light + dark theme) |
-| `data.js` | The content: all 60 exercises, descriptions, rep goals |
+| `data.js` | The content: 60 exercises with rep goals, 38 variations, warm-ups |
 | `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
 | `qrcode.js` | Self-contained QR-code generator (no dependencies) |
 | `sync.js` | Optional cloud sync: talks to your database, merges two devices |

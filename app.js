@@ -233,7 +233,10 @@
     // their last edit, so a genuinely edited copy on another device wins.
     var mts = Number(e.mts);
     if (!isFinite(mts) || mts <= 0) mts = ts;
-    return { id: id, ts: ts, date: date, areaId: e.areaId, step: step, sets: sets, note: note, mts: mts };
+    // Which variation was done, if not the step's own exercise. Only names the
+    // data file knows are kept, so a hand-edited backup can't inject markup.
+    var variant = (typeof e.variant === "string" && variationByName(e.areaId, e.variant)) ? e.variant : "";
+    return { id: id, ts: ts, date: date, areaId: e.areaId, step: step, sets: sets, note: note, mts: mts, variant: variant };
   }
 
   var state = loadState();
@@ -376,9 +379,9 @@
 
   /* ---------- Training log ---------- */
 
-  function addLogEntry(areaId, step, sets, note) {
+  function addLogEntry(areaId, step, sets, note, variant) {
     var ts = nowMs();
-    var entry = { id: genId(), ts: ts, date: dateStr(ts), areaId: areaId, step: step, sets: sets, note: note || "", mts: ts };
+    var entry = { id: genId(), ts: ts, date: dateStr(ts), areaId: areaId, step: step, sets: sets, note: note || "", mts: ts, variant: variant || "" };
     state.log.push(entry);
     saveState();
     return entry;
@@ -487,6 +490,100 @@
     recordSnapshot();
   }
 
+  /* ---------- The plan: what to actually do today ----------
+
+     Everything here is derived from where you are right now — current step and
+     highest standard met — and nothing is stored. That is what makes the plan
+     follow you: move up a step and the next render prescribes the new
+     exercise's targets, with no plan to regenerate and nothing to go stale.  */
+
+  // The movements scheduled for today, or [] when no routine is set.
+  function todaysMovements() {
+    if (!state.routine.enabled) return [];
+    var sessions = routineSessions();
+    return sessions[state.routine.sessionIndex % sessions.length] || [];
+  }
+
+  function variationsFor(areaId, step) {
+    var list = (typeof VARIATIONS !== "undefined" && VARIATIONS[areaId]) || [];
+    return list.filter(function (v) { return step >= v.from && step <= v.to; });
+  }
+
+  function variationByName(areaId, name) {
+    var list = (typeof VARIATIONS !== "undefined" && VARIATIONS[areaId]) || [];
+    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+    return null;
+  }
+
+  function warmupFor(areaId) {
+    return (typeof WARMUPS !== "undefined" && WARMUPS[areaId]) || [];
+  }
+
+  // What to do for one movement today.
+  function prescribe(areaId) {
+    var ai = areaIndexById(areaId);
+    var a = AREAS[ai];
+    var st = state.areas[areaId];
+    var stepIdx = st.step - 1;
+    var stepObj = a.steps[stepIdx];
+
+    // Chase the lowest standard you haven't met. Having met all three, the work
+    // is to hold that level until you take the next step up.
+    var goalIdx = st.std < 3 ? st.std : 2;
+    var goal = stepObj.standards[goalIdx];
+    var parsed = parseStandard(goal.target);
+    var perSide = /each side/i.test(goal.target);
+
+    var atTop = st.step >= AREAS[ai].steps.length;
+    var readyToAdvance = st.std >= 3 && !atTop;
+
+    var sets = parsed.kind === "reps" ? parsed.sets : 1;
+    var reps = parsed.kind === "reps" ? parsed.reps : 0;
+    var seconds = parsed.kind === "time" ? parsed.seconds : 0;
+
+    // One easy set first, at roughly half the working number.
+    var warmupReps = parsed.kind === "reps" ? Math.max(3, Math.round(reps / 2)) : 0;
+    var warmupSecs = parsed.kind === "time" ? Math.max(10, Math.round(seconds / 2)) : 0;
+
+    return {
+      areaId: areaId, areaIdx: ai, area: a,
+      step: st.step, stepIdx: stepIdx, stepObj: stepObj,
+      stdMet: st.std,
+      goalIdx: goalIdx, goalLabel: goal.label, goalTarget: goal.target,
+      kind: parsed.kind, sets: sets, reps: reps, seconds: seconds,
+      perSide: perSide, timed: !!stepObj.timed || parsed.kind === "time",
+      warmupReps: warmupReps, warmupSecs: warmupSecs,
+      warmup: warmupFor(areaId),
+      variations: variationsFor(areaId, st.step),
+      readyToAdvance: readyToAdvance,
+      nextStep: readyToAdvance ? a.steps[stepIdx + 1] : null,
+      mastered: atTop && st.std >= 3,
+      done: trainedToday(areaId)
+    };
+  }
+
+  // "2 sets of 12" / "hold 45 seconds (each side)" — the one line that says
+  // what to do. Kept identical everywhere it appears.
+  function prescriptionLine(p) {
+    var side = p.perSide ? " each side" : "";
+    if (p.kind === "time") return "hold " + fmtDuration(p.seconds) + side;
+    if (p.kind !== "reps") return p.goalTarget;
+    return p.sets + (p.sets === 1 ? " set of " : " sets of ") + p.reps + side;
+  }
+
+  // Rough minutes for a whole session, so the card can say what it will cost
+  // you. Working sets are counted at ~40 seconds plus your rest setting.
+  function sessionMinutes(list) {
+    var rest = state.settings.restSeconds;
+    var total = 0;
+    list.forEach(function (p) {
+      var work = p.kind === "time" ? Math.max(p.seconds, 20) : 40;
+      var setCount = p.sets + 1; // + the warm-up set
+      total += setCount * work + (setCount - 1) * rest + 45; // 45s to set up
+    });
+    return Math.max(1, Math.round(total / 60));
+  }
+
   /* ---------- Streak + training days ---------- */
 
   function trainingDaySet() {
@@ -547,6 +644,14 @@
   function fmtTime(sec) {
     sec = Math.max(0, Math.round(sec));
     return Math.floor(sec / 60) + ":" + pad2(sec % 60);
+  }
+  // Clock format reads badly mid-sentence ("hold 0:30"), so prose gets this.
+  function fmtDuration(sec) {
+    sec = Math.max(0, Math.round(sec));
+    if (sec < 60) return sec + " seconds";
+    var m = Math.floor(sec / 60), s = sec % 60;
+    var mins = m + (m === 1 ? " minute" : " minutes");
+    return s ? mins + " " + s + "s" : mins;
   }
   function ensureAudio() {
     try {
@@ -919,28 +1024,40 @@
       var sessions = routineSessions();
       var idx = state.routine.sessionIndex % sessions.length;
       var sess = sessions[idx];
-      var allDone = sess.every(function (id) { return trainedToday(id); });
-      var rows = sess.map(function (id) {
-        var ai = areaIndexById(id);
-        var a = AREAS[ai];
-        var st = state.areas[id];
-        var done = trainedToday(id);
-        return '<button class="td-move' + (done ? " done" : "") + '" data-area="' + ai + '" style="--area:' + areaColorVar(a) + '">' +
-          '<span class="tdcheck">' + (done ? "&#10003;" : "") + "</span>" +
-          '<span class="tdinfo"><span class="tdname">' + a.icon + " " + esc(a.name) + "</span>" +
-          '<span class="tdstep">Step ' + st.step + " &middot; " + esc(a.steps[st.step - 1].name) + "</span></span>" +
+      var plan = sess.map(prescribe);
+      var allDone = plan.every(function (p) { return p.done; });
+      var leftToDo = plan.filter(function (p) { return !p.done; });
+      var rows = plan.map(function (p) {
+        return '<button class="td-move' + (p.done ? " done" : "") + '" data-area="' + p.areaIdx + '" style="--area:' + areaColorVar(p.area) + '">' +
+          '<span class="tdcheck">' + (p.done ? "&#10003;" : "") + "</span>" +
+          '<span class="tdinfo"><span class="tdname">' + p.area.icon + " " + esc(p.stepObj.name) + "</span>" +
+          '<span class="tdstep">' + esc(prescriptionLine(p)) + " &middot; " + esc(p.goalLabel) + " goal</span>" +
+          (p.readyToAdvance ? '<span class="tdready">Ready for Step ' + (p.step + 1) + " &#8212; " + esc(p.nextStep.name) + "</span>" : "") +
+          "</span>" +
           '<span class="chev">&#8250;</span></button>';
       }).join("");
+      var mins = sessionMinutes(leftToDo.length ? leftToDo : plan);
       parts.push('<div class="today-card">' +
-        '<div class="today-head"><span class="today-title">Today&#8217;s session</span><span class="today-count">' + (idx + 1) + " of " + sessions.length + "</span></div>" +
+        '<div class="today-head"><span class="today-title">Today&#8217;s session</span>' +
+        '<span class="today-count">Day ' + (idx + 1) + " of " + sessions.length +
+        (allDone ? "" : " &middot; ~" + mins + " min") + "</span></div>" +
         '<div class="td-moves">' + rows + "</div>" +
-        '<button class="btn' + (allDone ? " primary" : "") + ' wide" id="nextSessionBtn">' + (allDone ? "Session done &#8212; next session &#8594;" : "Skip to next session &#8594;") + "</button>" +
+        (allDone
+          ? '<button class="btn primary wide" id="nextSessionBtn">Session done &#8212; queue the next one &#8594;</button>'
+          : '<button class="btn primary wide" id="startSessionBtn">&#9654; Start session</button>' +
+            '<button class="btn wide" id="nextSessionBtn">Skip to next session &#8594;</button>') +
         "</div>");
     } else {
       parts.push('<button class="today-card setup" id="setupRoutineBtn">' +
         '<span class="today-title">&#43; Set up a weekly routine</span>' +
         '<span class="today-sub">Get a &#8220;today&#8217;s session&#8221; plan across your week.</span></button>');
     }
+
+    // Outside the routine branch on purpose: the library is a reference you may
+    // want whether or not you've set a routine up.
+    parts.push('<div class="today-links">' +
+      (state.routine.enabled ? '<button class="tdlink" id="weekBtn">&#128198; This week</button>' : "") +
+      '<button class="tdlink" id="libraryBtn">&#128218; Exercise library</button></div>');
 
     var nudge = smartNudge();
     if (nudge) parts.push('<div class="nudge">' + esc(nudge) + "</div>");
@@ -960,6 +1077,12 @@
     });
     var setup = $("#setupRoutineBtn", host);
     if (setup) setup.addEventListener("click", openSettings);
+    var start = $("#startSessionBtn", host);
+    if (start) start.addEventListener("click", openSession);
+    var week = $("#weekBtn", host);
+    if (week) week.addEventListener("click", openWeek);
+    var lib = $("#libraryBtn", host);
+    if (lib) lib.addEventListener("click", openLibrary);
   }
 
   /* ---------- Sheet navigation (in-app stack, no browser history) ---------- */
@@ -991,14 +1114,36 @@
   function openHistory() { pushView({ t: "history" }); }
   function openStats() { pushView({ t: "stats" }); }
   function openDay(dateKey) { pushView({ t: "day", d: dateKey }); }
+  function openWeek() { pushView({ t: "week" }); }
+  function openLibrary() { pushView({ t: "library" }); }
+  function openSession() { sessionCursor = -1; pushView({ t: "session" }); }
+
+  // Which movement the guided session is on. -1 means "whichever you haven't
+  // logged yet", so closing the app mid-workout and coming back lands you in
+  // the right place with nothing stored.
+  var sessionCursor = -1;
+
+  function sessionPlan() { return todaysMovements().map(prescribe); }
+
+  function sessionAt(plan) {
+    if (sessionCursor >= 0 && sessionCursor < plan.length) return sessionCursor;
+    for (var i = 0; i < plan.length; i++) if (!plan[i].done) return i;
+    return -1; // everything logged
+  }
 
   // Draft for the in-progress log/edit form, so re-renders keep values.
-  var logDraft = { key: "", sets: [], note: "", editId: null };
+  var logDraft = { key: "", sets: [], note: "", editId: null, variant: "" };
 
-  function openLog(areaIdx, stepIdx) {
-    var step = AREAS[areaIdx].steps[stepIdx];
-    logDraft = { key: areaIdx + ":" + stepIdx, sets: [], note: "", editId: null };
+  function openLog(areaIdx, stepIdx, variant) {
+    var a = AREAS[areaIdx];
+    var step = a.steps[stepIdx];
+    logDraft = { key: areaIdx + ":" + stepIdx, sets: [], note: "", editId: null, variant: variant || "" };
+    // Open with one row per prescribed set, so the form already has the shape
+    // of the workout you were just told to do.
     var rows = step.timed ? 1 : 2;
+    if (!step.timed && state.areas[a.id].step === stepIdx + 1) {
+      rows = Math.max(1, Math.min(6, prescribe(a.id).sets));
+    }
     for (var i = 0; i < rows; i++) logDraft.sets.push("");
     pushView({ t: "log", a: areaIdx, s: stepIdx });
   }
@@ -1008,7 +1153,7 @@
     state.log.forEach(function (x) { if (x.id === id) e = x; });
     if (!e) return;
     var ai = areaIndexById(e.areaId);
-    logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id };
+    logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id, variant: e.variant || "" };
     pushView({ t: "log", a: ai, s: e.step - 1 });
   }
 
@@ -1035,8 +1180,14 @@
       var target = null;
       state.log.forEach(function (x) { if (x.id === logDraft.editId) target = x; });
       var savedOk = true;
-      if (target) { target.sets = sets; target.note = logDraft.note; target.mts = nowMs(); savedOk = saveState(); }
-      logDraft = { key: "", sets: [], note: "", editId: null };
+      if (target) {
+        target.sets = sets;
+        target.note = logDraft.note;
+        target.variant = logDraft.variant || "";
+        target.mts = nowMs();
+        savedOk = saveState();
+      }
+      logDraft = { key: "", sets: [], note: "", editId: null, variant: "" };
       refresh();
       goBack();
       toast(savedOk ? "Session updated ✓" : "Updated in this tab only — storage is full or blocked");
@@ -1045,10 +1196,14 @@
 
     var isCurrent = state.areas[a.id].step === n;
     var prevStd = state.areas[a.id].std;
-    addLogEntry(a.id, n, sets, logDraft.note);
+    var variant = variationByName(a.id, logDraft.variant);
+    addLogEntry(a.id, n, sets, logDraft.note, logDraft.variant);
 
     var msg = "Session logged ✓";
-    if (isCurrent) {
+    // An easier swap is real training and worth recording, but it isn't the
+    // work the standard asks for — so it must never award one.
+    var countsForStandard = !variant || variant.effort !== "easier";
+    if (isCurrent && countsForStandard) {
       var det = detectStandard(step, sets);
       if (det > prevStd) {
         state.areas[a.id].std = det;
@@ -1060,7 +1215,10 @@
         msg = (det === 3 && n < 10) ? (label + " standard met — ready to move up!") : (label + " standard met!");
       }
     }
-    logDraft = { key: "", sets: [], note: "", editId: null };
+    if (variant && variant.effort === "easier" && isCurrent) {
+      msg = "Logged " + variant.name + " ✓ — practice, so your standard is unchanged";
+    }
+    logDraft = { key: "", sets: [], note: "", editId: null, variant: "" };
     refresh();
     goBack(); // back to the step detail, which now reflects any new standard
     // Don't claim success if the write never landed.
@@ -1117,6 +1275,9 @@
     else if (view.t === "history") sheet.innerHTML = historyPaneHTML();
     else if (view.t === "day") sheet.innerHTML = dayPaneHTML(view.d);
     else if (view.t === "stats") sheet.innerHTML = statsPaneHTML();
+    else if (view.t === "session") sheet.innerHTML = sessionPaneHTML();
+    else if (view.t === "week") sheet.innerHTML = weekPaneHTML();
+    else if (view.t === "library") sheet.innerHTML = libraryPaneHTML();
     else sheet.innerHTML = settingsPaneHTML();
     wireSheet(view);
     var body = $(".sheet-body", sheet);
@@ -1138,20 +1299,42 @@
       var tags = "";
       if (n === st.step) tags += ' <span class="tag cur">CURRENT</span>';
       if (step.master) tags += ' <span class="tag master">MASTER</span>';
-      var targets = step.standards.map(function (s) { return s.target.replace(/\s*\(each side\)/, ""); }).join(" &#8594; ");
+      // All three goals, labelled — this list doubles as the reference for
+      // "what do I have to do at this level".
+      var goals = step.standards.map(function (s) {
+        return '<span class="goalpill"><b>' + esc(s.label.charAt(0)) + "</b> " +
+          esc(s.target.replace(/\s*\(each side\)/, "")) + "</span>";
+      }).join("");
       return '<button class="rung' + cls + '" data-step="' + i + '" style="--area:' + areaColorVar(a) + '">' +
         '<span class="num">' + numHTML + "</span>" +
         '<span class="info"><span class="nm">' + esc(step.name) + tags + "</span>" +
-        '<span class="tg">' + targets + (step.perSide ? " · each side" : "") + (step.timed ? " · timed hold" : "") + "</span></span>" +
+        '<span class="tg">' + esc(step.why) + "</span>" +
+        '<span class="goals">' + goals + "</span>" +
+        (step.perSide || step.timed
+          ? '<span class="tgnote">' + (step.perSide ? "each side" : "") +
+            (step.perSide && step.timed ? " · " : "") + (step.timed ? "timed hold" : "") + "</span>"
+          : "") +
+        "</span>" +
         '<span class="chev">&#8250;</span></button>';
     }).join("");
+
+    var vars = variationsFor(a.id, st.step);
+    var varHTML = vars.length
+      ? "<h4>Swaps for step " + st.step + "</h4>" +
+        '<p class="hint">Alternatives that fit where you are now. &#8220;Practice&#8221; ones build the movement but don&#8217;t award a standard.</p>' +
+        '<div class="varlist">' + vars.map(function (v) {
+          return '<div class="varcard"><div class="varname">' + esc(v.name) +
+            ' <span class="swaptag ' + v.effort + '">' + (v.effort === "easier" ? "practice" : v.effort) + "</span></div>" +
+            '<div class="varwhy">' + esc(v.why) + "</div></div>";
+        }).join("") + "</div>"
+      : "";
 
     return sheetHead({
       title: a.icon + " " + esc(a.name),
       sub: esc(a.tagline),
       areaColor: areaColorVar(a),
       back: false
-    }) + '<div class="sheet-body"><div class="ladder">' + rows + "</div></div>";
+    }) + '<div class="sheet-body" style="--area:' + areaColorVar(a) + '"><div class="ladder">' + rows + "</div>" + varHTML + "</div>";
   }
 
   /* ---------- Step pane (exercise detail) ---------- */
@@ -1226,6 +1409,25 @@
 
   /* ---------- Log pane ---------- */
 
+  // "What did you actually do?" — the step's own exercise, or one of the
+  // variations that fits this step.
+  function variantPickerHTML(areaId, step) {
+    var list = variationsFor(areaId, step);
+    if (!list.length) return "";
+    var sel = logDraft.variant;
+    var chips = '<button class="chip vchip' + (!sel ? " sel" : "") + '" data-variant="">As prescribed</button>' +
+      list.map(function (v) {
+        return '<button class="chip vchip' + (sel === v.name ? " sel" : "") + '" data-variant="' + esc(v.name) + '">' + esc(v.name) + "</button>";
+      }).join("");
+    var chosen = variationByName(areaId, sel);
+    return '<h4 class="tight">What did you do?</h4>' +
+      '<div class="chips">' + chips + "</div>" +
+      (chosen
+        ? '<p class="vnote">' + esc(chosen.why) + (chosen.effort === "easier"
+            ? " <strong>Practice work — this won&#8217;t award a standard.</strong>" : "") + "</p>"
+        : "");
+  }
+
   function logPaneHTML(areaIdx, stepIdx) {
     var a = AREAS[areaIdx], step = a.steps[stepIdx], color = areaColorVar(a);
     var n = stepIdx + 1;
@@ -1268,6 +1470,7 @@
       '<div class="sheet-body logpane" style="--area:' + color + '">' +
       notCurrentNote +
       '<p class="goalref">Goals &mdash; ' + goalRef + (step.perSide ? "  (each side)" : "") + "</p>" +
+      variantPickerHTML(a.id, n) +
       "<h4>" + (timed ? "Your holds" : "Your sets") + "</h4>" +
       '<div class="setlist">' + setRows + "</div>" +
       '<button class="btn addset" id="addSet">&#65291; Add ' + (timed ? "hold" : "set") + "</button>" +
@@ -1276,6 +1479,162 @@
       "<h4>Note (optional)</h4>" +
       '<textarea id="logNote" class="lognote" rows="2" placeholder="How did it feel?">' + esc(logDraft.note || "") + "</textarea>" +
       '<button class="btn primary wide" id="saveLog" style="--area:' + color + '">Save session</button>' +
+      "</div>";
+  }
+
+  /* ---------- Guided session ---------- */
+
+  function sessionPaneHTML() {
+    var plan = sessionPlan();
+    if (!plan.length) {
+      return sheetHead({ title: "Session", sub: "", back: true, backLabel: "Home" }) +
+        '<div class="sheet-body"><p class="empty">No routine set up yet.<br>Choose how many days a week you train in Settings.</p></div>';
+    }
+    var i = sessionAt(plan);
+    if (i === -1) return sessionDonePaneHTML(plan);
+
+    var p = plan[i];
+    var color = areaColorVar(p.area);
+    var dots = plan.map(function (q, k) {
+      return '<span class="sdot' + (q.done ? " done" : "") + (k === i ? " now" : "") + '" style="--area:' + areaColorVar(q.area) + '"></span>';
+    }).join("");
+
+    var warm = p.warmup.map(function (w) { return "<li>" + esc(w) + "</li>"; }).join("");
+    var cues = p.stepObj.how.map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("");
+    var swaps = p.variations.length
+      ? '<details class="swaps"><summary>Swap for something else (' + p.variations.length + ")</summary>" +
+        p.variations.map(function (v) {
+          return '<button class="swap" data-variant="' + esc(v.name) + '">' +
+            '<span class="swapname">' + esc(v.name) +
+            ' <span class="swaptag ' + v.effort + '">' + (v.effort === "same" ? "same" : v.effort) + "</span></span>" +
+            '<span class="swapwhy">' + esc(v.why) + "</span></button>";
+        }).join("") + "</details>"
+      : "";
+
+    return sheetHead({
+      title: esc(p.stepObj.name),
+      sub: p.area.icon + " " + esc(p.area.name) + " &middot; Step " + p.step + " of 10",
+      areaColor: color, back: true, backLabel: "Home"
+    }) +
+      '<div class="sheet-body session" style="--area:' + color + '">' +
+      '<div class="sdots">' + dots + '<span class="scount">' + (i + 1) + " of " + plan.length + "</span></div>" +
+
+      '<div class="rx"><span class="rxlabel">Do this</span>' +
+      '<span class="rxbig">' + esc(prescriptionLine(p)) + "</span>" +
+      '<span class="rxgoal">to meet the ' + esc(p.goalLabel) + " standard" +
+      (p.mastered ? " &mdash; you&#8217;ve topped this ladder, keep it" : "") + "</span></div>" +
+
+      (p.readyToAdvance
+        ? '<div class="advance"><b>You&#8217;ve cleared this step.</b> Next up is Step ' + (p.step + 1) +
+          " &mdash; " + esc(p.nextStep.name) + '.<button class="btn wide" id="sessionAdvance">Move up now</button></div>'
+        : "") +
+
+      (warm ? '<h4>Warm up first</h4><ul class="cues">' + warm + "</ul>" : "") +
+      (p.kind === "reps" && p.warmupReps
+        ? '<p class="hint">Then one easy set of about ' + p.warmupReps + " before the working sets.</p>" : "") +
+      (p.kind === "time" && p.warmupSecs
+        ? '<p class="hint">Then one easy hold of about ' + esc(fmtDuration(p.warmupSecs)) + " before the working holds.</p>" : "") +
+
+      "<h4>Form cues</h4><ul class=\"cues\">" + cues + "</ul>" +
+      swaps +
+
+      '<div class="sactions">' +
+      '<button class="btn primary wide" id="sessionLog">Log this movement</button>' +
+      '<div class="btnrow"><button class="btn" id="sessionRest">&#9201; Rest ' + fmtTime(state.settings.restSeconds) + "</button>" +
+      '<button class="btn" id="sessionSkip">' + (i + 1 < plan.length ? "Next movement &#8594;" : "Finish &#8594;") + "</button></div>" +
+      "</div></div>";
+  }
+
+  function sessionDonePaneHTML(plan) {
+    var rows = plan.map(function (p) {
+      var todays = state.log.filter(function (e) {
+        return e.areaId === p.areaId && dateStr(e.ts) === dateStr(nowMs());
+      });
+      var best = todays.reduce(function (m, e) { return Math.max(m, topSet(e)); }, 0);
+      return '<div class="donerow" style="--area:' + areaColorVar(p.area) + '">' +
+        '<span class="doneicon">&#10003;</span>' +
+        '<span class="doneinfo"><span class="donename">' + p.area.icon + " " + esc(p.stepObj.name) + "</span>" +
+        '<span class="donesets">best ' + best + (p.timed ? " sec" : " reps") + "</span></span></div>";
+    }).join("");
+    var streak = currentStreak();
+    return sheetHead({ title: "Session complete", sub: "", back: true, backLabel: "Home" }) +
+      '<div class="sheet-body session">' +
+      '<p class="bigdone">&#127881;</p>' +
+      '<div class="donelist">' + rows + "</div>" +
+      "<p>" + (streak > 1 ? "That&#8217;s <strong>" + streak + " days</strong> in a row." : "Logged and counted.") + "</p>" +
+      '<button class="btn primary wide" id="sessionNext">Queue the next session &#8594;</button>' +
+      "</div>";
+  }
+
+  /* ---------- The week, and where each area is heading ---------- */
+
+  function weekPaneHTML() {
+    if (!state.routine.enabled) {
+      return sheetHead({ title: "&#128198; This week", sub: "", back: true, backLabel: "Home" }) +
+        '<div class="sheet-body"><p class="empty">No routine set up yet.<br>Choose 2, 3 or 6 days a week in Settings and your plan appears here.</p></div>';
+    }
+    var sessions = routineSessions();
+    var cur = state.routine.sessionIndex % sessions.length;
+
+    var days = sessions.map(function (sess, i) {
+      var moves = sess.map(function (id) {
+        var p = prescribe(id);
+        return '<div class="wkmove" style="--area:' + areaColorVar(p.area) + '">' +
+          '<span class="wkdot"></span>' +
+          '<span class="wkname">' + p.area.icon + " " + esc(p.stepObj.name) + "</span>" +
+          '<span class="wkrx">' + esc(prescriptionLine(p)) + "</span></div>";
+      }).join("");
+      return '<div class="wkday' + (i === cur ? " now" : "") + '">' +
+        '<div class="wkhead"><span class="wkdaylabel">Day ' + (i + 1) + "</span>" +
+        (i === cur ? '<span class="wknow">today</span>' : "") + "</div>" + moves + "</div>";
+    }).join("");
+
+    // Where each area is going next: what to hit here, and the rungs beyond.
+    var map = AREAS.map(function (a) {
+      var p = prescribe(a.id);
+      var ahead = a.steps.slice(p.step, p.step + 2).map(function (s, k) {
+        return '<li>Step ' + (p.step + 1 + k) + " &mdash; " + esc(s.name) + "</li>";
+      }).join("");
+      var need = p.mastered
+        ? "Ladder complete — nothing left above this."
+        : (p.readyToAdvance
+          ? "Cleared. Move up whenever you're ready."
+          : "Hit " + prescriptionLine(p) + " to reach the " + p.goalLabel + " standard.");
+      return '<div class="mapcard" style="--area:' + areaColorVar(a) + '">' +
+        '<div class="maphead">' + a.icon + " " + esc(a.name) + "</div>" +
+        '<div class="mapnow">Step ' + p.step + " &middot; " + esc(p.stepObj.name) + "</div>" +
+        '<div class="mapneed">' + esc(need) + "</div>" +
+        (ahead ? '<div class="maplabel">Ahead</div><ul class="mapahead">' + ahead + "</ul>" : "") +
+        "</div>";
+    }).join("");
+
+    return sheetHead({ title: "&#128198; This week", sub: "", back: true, backLabel: "Home" }) +
+      '<div class="sheet-body week">' +
+      "<p>Your " + sessions.length + "-day rotation. It advances when you finish a session, so rest days are yours to take whenever you like.</p>" +
+      '<div class="wkdays">' + days + "</div>" +
+      "<h4>Where each area is heading</h4>" +
+      '<div class="mapgrid">' + map + "</div>" +
+      "</div>";
+  }
+
+  /* ---------- Exercise library ---------- */
+
+  function libraryPaneHTML() {
+    var rows = CARD_ORDER.map(function (id) {
+      var ai = areaIndexById(id);
+      var a = AREAS[ai];
+      var st = state.areas[id];
+      return '<button class="librow" data-area="' + ai + '" style="--area:' + areaColorVar(a) + '">' +
+        '<span class="libicon">' + a.icon + "</span>" +
+        '<span class="libinfo"><span class="libname">' + esc(a.name) + "</span>" +
+        '<span class="libsub">' + esc(a.tagline) + "</span>" +
+        '<span class="libwhere">You&#8217;re on step ' + st.step + " &middot; " + esc(a.steps[st.step - 1].name) + "</span></span>" +
+        '<span class="chev">&#8250;</span></button>';
+    }).join("");
+    return sheetHead({ title: "&#128218; Exercise library", sub: "", back: true, backLabel: "Home" }) +
+      '<div class="sheet-body library">' +
+      "<p>Every movement, all ten steps, with the reps and sets that count at each level. Pick an area.</p>" +
+      '<div class="librows">' + rows + "</div>" +
       "</div>";
   }
 
@@ -1685,8 +2044,66 @@
           toast("Rest timer started");
         });
       });
+      sheet.querySelectorAll(".vchip").forEach(function (b) {
+        b.addEventListener("click", function () {
+          readLogInputs();   // keep anything already typed
+          logDraft.variant = b.getAttribute("data-variant") || "";
+          renderSheet();
+        });
+      });
       var saveBtn = $("#saveLog", sheet);
       if (saveBtn) saveBtn.addEventListener("click", function () { saveLog(la, ls); });
+    }
+
+    if (view.t === "session") {
+      var plan = sessionPlan();
+      var si = sessionAt(plan);
+      var cur = si >= 0 ? plan[si] : null;
+
+      var logB = $("#sessionLog", sheet);
+      if (logB && cur) logB.addEventListener("click", function () {
+        openLog(cur.areaIdx, cur.stepIdx);
+      });
+      var restB = $("#sessionRest", sheet);
+      if (restB) restB.addEventListener("click", function () {
+        startRest(state.settings.restSeconds);
+        toast("Rest timer started");
+      });
+      var skipB = $("#sessionSkip", sheet);
+      if (skipB) skipB.addEventListener("click", function () {
+        // Move past this one by hand; -1 hands control back to "first unlogged".
+        sessionCursor = (si + 1 < plan.length) ? si + 1 : -1;
+        renderSheet();
+      });
+      var advB = $("#sessionAdvance", sheet);
+      if (advB && cur) advB.addEventListener("click", function () {
+        setAreaProgress(cur.areaId, cur.step + 1, 0);
+        refresh();
+        renderSheet();
+        toast("Moved up to step " + (cur.step + 1) + " ✓");
+      });
+      sheet.querySelectorAll(".swap").forEach(function (b) {
+        b.addEventListener("click", function () {
+          if (cur) openLog(cur.areaIdx, cur.stepIdx, b.getAttribute("data-variant"));
+        });
+      });
+      var nextB = $("#sessionNext", sheet);
+      if (nextB) nextB.addEventListener("click", function () {
+        var sessions3 = routineSessions();
+        state.routine.sessionIndex = (state.routine.sessionIndex + 1) % sessions3.length;
+        touchPrefs();
+        saveState();
+        sessionCursor = -1;
+        renderToday();
+        closeAll();
+        toast("Next session ready");
+      });
+    }
+
+    if (view.t === "library") {
+      sheet.querySelectorAll(".librow").forEach(function (b) {
+        b.addEventListener("click", function () { openArea(Number(b.getAttribute("data-area"))); });
+      });
     }
 
     // The history pane and the per-day pane share the same session-row markup.

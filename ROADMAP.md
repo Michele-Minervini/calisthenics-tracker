@@ -17,6 +17,7 @@ All tiers are built, tested, and deployed (service worker `bigsix-v10`).
 | **Tier 1** | v5 | Log a session (sets/reps or hold time); auto-detection of the Beginner/Intermediate/Progression standard with a move-up prompt; global rest timer; training-history list; downloadable full backup file. |
 | **Tier 2** | v7–v8 | Weekly routine + "Today's session" card; smart nudge; ghost radar (past vs now); GitHub-style training heatmap; streaks; milestone timeline; per-exercise sparkline; edit a logged session; QR code for the backup link. |
 | **Tier 3** | v9–v10 | Day detail (tap a heatmap square for that day's sessions); **optional cloud sync** across devices, paired by QR. |
+| **Tier 4** | v15 | **The plan.** Every movement carries a prescription (exercise, sets, reps, standard being chased) derived from your current position; guided session walkthrough; 38 swap variations; exercise library; week view with a per-area "what's next" map. |
 
 Each tier went through an adversarial multi-agent review before shipping; the
 Tier 2 review caught a whole class of daylight-saving date bugs, now fixed and
@@ -76,6 +77,13 @@ None committed — just a menu for later:
   compare equal and the devices push at each other forever. Every sort inside
   it falls back to the id for exactly this reason; a sort on timestamp alone is
   not a total order. `merge-test.js` covers this.
+- **The plan is derived, never stored.** `prescribe()` reads your current step
+  and standard on every render. That is the whole reason the plan follows you
+  when you level up — resist any urge to cache it, or it will go stale exactly
+  when it matters.
+- **An easier variation must never award a standard.** Variations are tagged
+  `easier` / `same` / `harder` in `data.js`; `saveLog` skips the auto-detection
+  for `easier` ones. Otherwise slow negatives would "earn" a step you can't do.
 - **Anything arriving from the network goes through `sanitizeState()`** before
   it is merged, same as a restored backup file. Treat the cloud copy as
   untrusted input, because anyone holding the sync code can write to it.

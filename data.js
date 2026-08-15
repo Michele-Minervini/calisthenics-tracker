@@ -989,3 +989,119 @@ const STANDARD_STATES = [
   { key: "intermediate", label: "Intermediate standard met", short: "I" },
   { key: "progression", label: "Progression standard met", short: "P" }
 ];
+
+/* ============================================================
+   Variations — alternatives you can swap in for the main step.
+
+   from / to  the step range where the variation makes sense
+   effort     "easier"  practice and technique work; hitting the target on
+                        one of these does NOT count toward the step's
+                        standard, because you did less work than the step asks
+              "same"    a sideways swap at the same difficulty; counts
+              "harder"  a tougher version; counts
+   timed      reps are seconds, not repetitions
+
+   These exist so a session never has to be skipped for want of variety, a
+   niggling wrist, or a bar you can't reach — not to replace the ladder.
+   ============================================================ */
+const VARIATIONS = {
+  pushup: [
+    { name: "Plank Hold", from: 1, to: 4, effort: "same", timed: true,
+      why: "The top of a pushup, held still — straight line from head to heels, midsection tight. Builds the rigid body every later step is pressed with." },
+    { name: "Slow Negatives", from: 3, to: 10, effort: "easier",
+      why: "Take 5 seconds to lower, then reset to the top however you can. Lets you train a step whose full rep you can't press yet — the fastest honest way in." },
+    { name: "Paused Reps", from: 3, to: 10, effort: "harder",
+      why: "Two full seconds motionless at the bottom of every rep. Removes all bounce and exposes whether the strength is really there." },
+    { name: "Tempo Pushups", from: 3, to: 10, effort: "harder",
+      why: "Three seconds down, three seconds up, no pause. Doubles the time your muscles spend working without adding a single rep." },
+    { name: "Wide Pushups", from: 4, to: 6, effort: "same",
+      why: "Hands a hand's width outside the shoulders. Shifts the work off the triceps and onto the chest — useful when your elbows want a break." },
+    { name: "Knuckle Pushups", from: 4, to: 10, effort: "same",
+      why: "On the first two knuckles with a straight wrist. Worth knowing if pushups start bothering your wrists." },
+    { name: "Decline Pushups", from: 5, to: 6, effort: "harder",
+      why: "Feet up on a chair or step. Moves load onto the upper chest and shoulders, and quietly prepares you for handstand work." },
+    { name: "Explosive Pushups", from: 5, to: 10, effort: "harder",
+      why: "Push hard enough that your hands leave the floor. Trains the speed that grinding out slow reps never will." }
+  ],
+  pullup: [
+    { name: "Dead Hangs", from: 1, to: 10, effort: "easier", timed: true,
+      why: "Just hang, shoulders active, for as long as you can hold. Grip is what fails first for most people — this is how you fix it." },
+    { name: "Scapular Pulls", from: 1, to: 5, effort: "easier",
+      why: "Hang, then pull your shoulder blades down and together without bending your arms. Teaches the first inch of a pullup, which is the inch most people skip." },
+    { name: "Slow Negatives", from: 3, to: 10, effort: "easier",
+      why: "Jump or step to the top position and lower yourself over 5 seconds. The single most effective way to earn a pullup you can't yet do." },
+    { name: "Chin-Up Grip", from: 4, to: 10, effort: "easier",
+      why: "Palms facing you. The biceps help far more, so expect a couple of extra reps — a good way to keep training when the overhand version stalls." },
+    { name: "Paused Pullups", from: 4, to: 10, effort: "harder",
+      why: "Two seconds with your chin held over the bar on every rep. The top is where pullups are won." },
+    { name: "Wide Pullups", from: 5, to: 7, effort: "harder",
+      why: "Grip well outside the shoulders. Less arm, more back, and noticeably harder for the same number of reps." },
+    { name: "Towel Grip", from: 5, to: 10, effort: "harder",
+      why: "Hang a towel over the bar and pull on that. Brutal on the grip and the forearms, and it carries over to everything else you hold onto." }
+  ],
+  legraise: [
+    { name: "Hollow Body Hold", from: 1, to: 6, effort: "same", timed: true,
+      why: "Flat on your back, lower back pressed down, shoulders and heels a few inches off the floor. The exact brace every leg raise depends on, held still." },
+    { name: "Paused Raises", from: 2, to: 10, effort: "harder",
+      why: "Stop for two seconds at the top of each rep. Kills the swinging that makes leg raises look easier than they are." },
+    { name: "Slow Lowering", from: 2, to: 10, effort: "harder",
+      why: "Five seconds to lower your legs on every rep. The lowering half is where the midsection actually gets strong." },
+    { name: "Twisting Raises", from: 3, to: 10, effort: "same",
+      why: "Bring your knees or feet slightly across to one side, alternating. Brings in the obliques the straight version barely touches." },
+    { name: "L-Sit Hold", from: 5, to: 10, effort: "harder", timed: true,
+      why: "Sitting, hands on the floor or on parallel bars, legs straight out and hovering. A brutal test of everything the ladder has built." },
+    { name: "Bent-Knee Hangs", from: 6, to: 10, effort: "easier",
+      why: "The hanging steps with knees tucked instead of legs long. The shorter lever buys you the reps while your grip catches up." }
+  ],
+  squat: [
+    { name: "Wall Sit", from: 1, to: 6, effort: "same", timed: true,
+      why: "Back flat against a wall, thighs parallel to the floor, hold. All the burn of squatting with none of the movement — kind to sore knees." },
+    { name: "Paused Squats", from: 3, to: 10, effort: "harder",
+      why: "Three seconds at the very bottom of each rep. Removes the bounce out of the hole, which is where most squats cheat." },
+    { name: "Slow Negatives", from: 4, to: 10, effort: "easier",
+      why: "Five seconds to descend, then stand however you can. The way into single-leg work long before you can stand back up on one leg." },
+    { name: "Split Squats", from: 5, to: 8, effort: "harder",
+      why: "One foot well forward, back knee dropping toward the floor. The honest bridge between two legs and one." },
+    { name: "Jump Squats", from: 5, to: 10, effort: "harder",
+      why: "Squat, then leave the ground. Trains power and lands you back in the squat — build up gradually, landings add up." },
+    { name: "Calf Raises", from: 1, to: 10, effort: "easier",
+      why: "Up onto the toes, slow down. The ladder trains everything below the waist except these, so they're worth tacking on." }
+  ],
+  bridge: [
+    { name: "Shoulder Openers", from: 1, to: 10, effort: "easier",
+      why: "Arms overhead against a wall, sliding up and down; or hands clasped behind you, chest lifted. Bridges are limited by stiff shoulders more often than weak hips." },
+    { name: "Bridge Hold", from: 1, to: 10, effort: "same", timed: true,
+      why: "Push up into the highest bridge you own and simply stay there. Holding teaches the position better than repetitions do." },
+    { name: "Hip Thrusts", from: 1, to: 4, effort: "same",
+      why: "Shoulders on a low step, feet flat, drive the hips to the ceiling. Direct work for the muscles the early bridges depend on." },
+    { name: "Rocking Bridges", from: 5, to: 10, effort: "harder",
+      why: "At the top of the bridge, rock your weight forward over the hands and back again. Builds the shoulder range the later steps demand." },
+    { name: "Bridge Walks", from: 6, to: 10, effort: "harder",
+      why: "Hold the top and take small steps with hands and feet. Strength through the whole position rather than just at one point in it." }
+  ],
+  hspu: [
+    { name: "Pike Hold", from: 1, to: 4, effort: "easier", timed: true,
+      why: "Feet on the floor, hips high, head between the arms, weight forward onto the hands. Handstand loading with both feet safely down." },
+    { name: "Pike Pushups", from: 3, to: 5, effort: "easier",
+      why: "From that pike position, bend the arms and lower the crown of your head toward the floor. The nearest thing to a handstand pushup you can do the right way up." },
+    { name: "Wall Walks", from: 2, to: 4, effort: "harder",
+      why: "Feet on a wall, hands walking backwards until you're near vertical, then walk out. Teaches you to be upside down without needing to kick up." },
+    { name: "Slow Negatives", from: 4, to: 10, effort: "easier",
+      why: "Kick up and lower over 5 seconds; come off the wall to reset. How the pressing strength gets built before you can press." },
+    { name: "Shoulder Taps", from: 3, to: 6, effort: "harder",
+      why: "In a wall handstand, shift onto one arm and tap the opposite shoulder. The balance and one-arm loading that steps 7 onward will demand." },
+    { name: "Freestanding Practice", from: 3, to: 10, effort: "same", timed: true,
+      why: "Away from the wall, kick up and balance for as long as you can, bailing sideways. Balance is a separate skill from strength and only time buys it." }
+  ]
+};
+
+/* A short warm-up for each area — enough to get blood into the tissue that is
+   about to work. Deliberately brief: a warm-up nobody does is worth nothing. */
+const WARMUPS = {
+  pushup: ["Arm circles, 10 forward and 10 back", "Slow shoulder rolls and a few wrist circles", "One easy set of a much simpler pushup step"],
+  pullup: ["Shoulder rolls and arm swings", "A 10-second dead hang", "A few scapular pulls"],
+  legraise: ["Knee hugs and gentle trunk twists", "A 15-second hollow body hold", "A few slow knee tucks"],
+  squat: ["Ankle and knee circles", "10 bodyweight squats to a comfortable depth", "A few slow calf raises"],
+  bridge: ["Gentle backbends standing, hands on hips", "Shoulder openers against a wall", "A few short bridges"],
+  hspu: ["Wrist circles and wrist push-backs on the floor", "Shoulder rolls and arm circles", "A 15-second pike hold"]
+};
