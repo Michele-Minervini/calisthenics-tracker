@@ -1230,3 +1230,5 @@ button.today-card.setup .today-title { color: var(--accent); }
 /* --- Variation picker in the log form --- */
 h4.tight { margin-bottom: 2px; }
 .vnote { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-top: 6px; }
+
+.settings .buildline { margin-top: 18px; font-variant-numeric: tabular-nums; }

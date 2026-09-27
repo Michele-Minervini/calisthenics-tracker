@@ -5,6 +5,9 @@
    the 10th step's third standard is the Elite standard.
    ============================================================ */
 
+/* Build stamp: app.js refuses to run on files from two different releases. */
+const DATA_BUILD = "bigsix-v16";
+
 const AREAS = [
   {
     id: "pushup",

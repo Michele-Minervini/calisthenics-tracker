@@ -1,0 +1,2457 @@
+{
+ "about": "Expected sanitizeState output for each input, generated from the pre-refactor code (Big Six Tracker v15) with the clock frozen at `now` and Math.random seeded with `seed`. tests/model-test.js asserts model.js still produces exactly this. If a change here is intended, it changes what every device stores: bump MODEL_VERSION in model.js and re-record with node tools/record-fixtures.js.",
+ "modelVersion": 4,
+ "now": 1790503200000,
+ "seed": 42,
+ "cases": [
+  {
+   "name": "not an object",
+   "input": null,
+   "expected": null
+  },
+  {
+   "name": "number",
+   "input": 3,
+   "expected": null
+  },
+  {
+   "name": "no areas",
+   "input": {
+    "log": []
+   },
+   "expected": null
+  },
+  {
+   "name": "areas is an array",
+   "input": {
+    "areas": []
+   },
+   "expected": null
+  },
+  {
+   "name": "areas is a string",
+   "input": {
+    "areas": "pushup"
+   },
+   "expected": null
+  },
+  {
+   "name": "v1 progress-only link state",
+   "input": {
+    "v": 1,
+    "areas": {
+     "pushup": {
+      "step": 4,
+      "std": 2
+     },
+     "squat": {
+      "step": "7",
+      "std": 1.6
+     },
+     "pullup": {
+      "step": 11,
+      "std": -1
+     },
+     "legraise": {
+      "step": 0,
+      "std": 3
+     },
+     "bridge": "bad",
+     "extra": {
+      "step": 5,
+      "std": 1
+     }
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 4,
+      "std": 2,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 3,
+      "mts": 0
+     },
+     "squat": {
+      "step": 7,
+      "std": 2,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "v2 with log and settings",
+   "input": {
+    "v": 2,
+    "areas": {
+     "pushup": {
+      "step": 3,
+      "std": 1
+     },
+     "pullup": {
+      "step": 3,
+      "std": 1
+     },
+     "legraise": {
+      "step": 3,
+      "std": 1
+     },
+     "squat": {
+      "step": 3,
+      "std": 1
+     },
+     "bridge": {
+      "step": 3,
+      "std": 1
+     },
+     "hspu": {
+      "step": 3,
+      "std": 1
+     }
+    },
+    "log": [
+     {
+      "id": "a1",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "squat",
+      "step": 3,
+      "sets": [
+       20,
+       18
+      ],
+      "note": "ok"
+     }
+    ],
+    "settings": {
+     "restSeconds": 120
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     },
+     "squat": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 3,
+      "std": 1,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "a1",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "squat",
+      "step": 3,
+      "sets": [
+       20,
+       18
+      ],
+      "note": "ok",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 120,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "rest bounds: 5 kept",
+   "input": {
+    "areas": {},
+    "settings": {
+     "restSeconds": 5
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 5,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "rest bounds: 4 rejected",
+   "input": {
+    "areas": {},
+    "settings": {
+     "restSeconds": 4
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "rest bounds: 3600 kept",
+   "input": {
+    "areas": {},
+    "settings": {
+     "restSeconds": 3600
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 3600,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "rest bounds: 3601 rejected",
+   "input": {
+    "areas": {},
+    "settings": {
+     "restSeconds": 3601
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "rest rounding",
+   "input": {
+    "areas": {},
+    "settings": {
+     "restSeconds": "89.6"
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 90,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "routine: valid",
+   "input": {
+    "areas": {},
+    "routine": {
+     "enabled": true,
+     "daysPerWeek": 6,
+     "sessionIndex": 4
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": true,
+     "daysPerWeek": 6,
+     "sessionIndex": 4
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "routine: bad days and index",
+   "input": {
+    "areas": {},
+    "routine": {
+     "enabled": 1,
+     "daysPerWeek": 5,
+     "sessionIndex": 50
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": true,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "routine: index 49 kept",
+   "input": {
+    "areas": {},
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": "2",
+     "sessionIndex": 49
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 2,
+     "sessionIndex": 49
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: invalid entries dropped",
+   "input": {
+    "areas": {},
+    "log": [
+     null,
+     "x",
+     {
+      "areaId": "nope",
+      "step": 2,
+      "sets": [
+       1
+      ]
+     },
+     {
+      "areaId": "pushup",
+      "step": 0,
+      "sets": [
+       1
+      ]
+     },
+     {
+      "areaId": "pushup",
+      "step": 11,
+      "sets": [
+       1
+      ]
+     },
+     {
+      "areaId": "pushup",
+      "step": 2,
+      "sets": "5"
+     },
+     {
+      "areaId": "pushup",
+      "step": 2,
+      "sets": []
+     },
+     {
+      "areaId": "pushup",
+      "step": 2,
+      "sets": [
+       -1,
+       "x",
+       null
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "smujndj40cvtb",
+      "ts": 1790503200000,
+      "date": "2026-09-27",
+      "areaId": "pushup",
+      "step": 2,
+      "sets": [
+       0
+      ],
+      "note": "",
+      "mts": 1790503200000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: set values rounded, negatives and junk dropped",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "a2",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       7.6,
+       "5",
+       -2,
+       "x",
+       0,
+       null
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "a2",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       8,
+       5,
+       0,
+       0
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: missing ts uses the clock, bad date recomputed",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "a3",
+      "areaId": "hspu",
+      "step": 1,
+      "sets": [
+       30
+      ],
+      "date": "2026-7-1"
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "a3",
+      "ts": 1790503200000,
+      "date": "2026-09-27",
+      "areaId": "hspu",
+      "step": 1,
+      "sets": [
+       30
+      ],
+      "note": "",
+      "mts": 1790503200000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: bad id regenerated",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "bad id!",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "smujndj40cvtb",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "smujndj409lwi",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: note capped at 280",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "a4",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a5",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a6",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": 7,
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "a4",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a5",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a6",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: missing mts falls back to ts",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "a7",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "variant": ""
+     },
+     {
+      "id": "a8",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": -5,
+      "variant": ""
+     },
+     {
+      "id": "a9",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800005,
+      "variant": ""
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "a7",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a8",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "a9",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800005,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "log: variant kept only when data.js knows it",
+   "input": {
+    "areas": {},
+    "log": [
+     {
+      "id": "b1",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": "Slow Negatives"
+     },
+     {
+      "id": "b2",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": "Bogus"
+     },
+     {
+      "id": "b3",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "squat",
+      "step": 5,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": "Slow Negatives"
+     },
+     {
+      "id": "b4",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": 3
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [
+     {
+      "id": "b1",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": "Slow Negatives"
+     },
+     {
+      "id": "b2",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     },
+     {
+      "id": "b3",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "squat",
+      "step": 5,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": "Slow Negatives"
+     },
+     {
+      "id": "b4",
+      "ts": 1782892800000,
+      "date": "2026-07-01",
+      "areaId": "pushup",
+      "step": 4,
+      "sets": [
+       10,
+       8
+      ],
+      "note": "",
+      "mts": 1782892800000,
+      "variant": ""
+     }
+    ],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "areas: mts kept when positive",
+   "input": {
+    "areas": {
+     "pushup": {
+      "step": 2,
+      "std": 1,
+      "mts": 1782892800000
+     },
+     "pullup": {
+      "step": 2,
+      "std": 1,
+      "mts": 0
+     },
+     "squat": {
+      "step": 2,
+      "std": 1,
+      "mts": "x"
+     }
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 2,
+      "std": 1,
+      "mts": 1782892800000
+     },
+     "pullup": {
+      "step": 2,
+      "std": 1,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 2,
+      "std": 1,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "ghostBase valid",
+   "input": {
+    "areas": {},
+    "settings": {
+     "ghostBase": {
+      "d": "2026-08-01",
+      "v": [
+       8,
+       4.3,
+       3,
+       4,
+       1,
+       0
+      ]
+     }
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": {
+      "d": "2026-08-01",
+      "v": [
+       8,
+       4.3,
+       3,
+       4,
+       1,
+       0
+      ]
+     }
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "ghostBase wrong length or out of range values",
+   "input": {
+    "areas": {},
+    "settings": {
+     "ghostBase": {
+      "d": "2026-08-01",
+      "v": [
+       11,
+       -1,
+       "3",
+       null,
+       5,
+       6
+      ]
+     }
+    }
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": {
+      "d": "2026-08-01",
+      "v": [
+       0,
+       0,
+       3,
+       0,
+       5,
+       6
+      ]
+     }
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "ghostFrom migrates to the first snapshot on or after it",
+   "input": {
+    "areas": {},
+    "settings": {
+     "ghostFrom": "2026-07-25"
+    },
+    "snapshots": [
+     {
+      "d": "2026-07-20",
+      "v": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     {
+      "d": "2026-07-26",
+      "v": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "d": "2026-08-01",
+      "v": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": {
+      "d": "2026-07-26",
+      "v": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ]
+     }
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [
+     {
+      "d": "2026-07-20",
+      "v": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     {
+      "d": "2026-07-26",
+      "v": [
+       2,
+       2,
+       2,
+       2,
+       2,
+       2
+      ]
+     },
+     {
+      "d": "2026-08-01",
+      "v": [
+       3,
+       3,
+       3,
+       3,
+       3,
+       3
+      ]
+     }
+    ],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "ghostFrom later than every snapshot",
+   "input": {
+    "areas": {},
+    "settings": {
+     "ghostFrom": "2026-09-01"
+    },
+    "snapshots": [
+     {
+      "d": "2026-07-20",
+      "v": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [
+     {
+      "d": "2026-07-20",
+      "v": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     }
+    ],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "snapshots: invalid dropped",
+   "input": {
+    "areas": {},
+    "snapshots": [
+     {
+      "d": "2026-07-20",
+      "v": [
+       1,
+       2
+      ]
+     },
+     {
+      "d": "bad",
+      "v": [
+       1,
+       1,
+       1,
+       1,
+       1,
+       1
+      ]
+     },
+     null,
+     {
+      "d": "2026-07-21",
+      "v": [
+       0,
+       10,
+       11,
+       -2,
+       "5",
+       null
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [
+     {
+      "d": "2026-07-21",
+      "v": [
+       0,
+       10,
+       0,
+       0,
+       5,
+       0
+      ]
+     }
+    ],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "milestones: filtered",
+   "input": {
+    "areas": {},
+    "milestones": [
+     {
+      "id": "m1",
+      "ts": 1782892800000,
+      "type": "advance",
+      "areaId": "pushup",
+      "step": 5
+     },
+     {
+      "id": "m2",
+      "ts": 1782892800000,
+      "type": "pr",
+      "areaId": "pushup",
+      "step": 5
+     },
+     {
+      "id": "m3",
+      "ts": 1782892800000,
+      "type": "master",
+      "areaId": "nope",
+      "step": 10
+     },
+     {
+      "id": "m4",
+      "ts": 1782892800000,
+      "type": "advance",
+      "areaId": "squat",
+      "step": 11
+     },
+     {
+      "id": "bad id",
+      "ts": -1,
+      "type": "master",
+      "areaId": "hspu",
+      "step": "10"
+     }
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [
+     {
+      "id": "m1",
+      "ts": 1782892800000,
+      "type": "advance",
+      "areaId": "pushup",
+      "step": 5
+     },
+     {
+      "id": "smujndj40cvtb",
+      "ts": 1790503200000,
+      "type": "master",
+      "areaId": "hspu",
+      "step": 10
+     }
+    ],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "tombstones: filtered",
+   "input": {
+    "areas": {},
+    "deleted": [
+     {
+      "id": "d1",
+      "ts": 1782892800000
+     },
+     {
+      "id": "bad id",
+      "ts": 1782892800000
+     },
+     {
+      "id": "d2"
+     },
+     null,
+     "x"
+    ]
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [
+     {
+      "id": "d1",
+      "ts": 1782892800000
+     },
+     {
+      "id": "d2",
+      "ts": 1790503200000
+     }
+    ],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "prefsMts kept only when positive",
+   "input": {
+    "areas": {},
+    "prefsMts": 1782892800000
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 1782892800000
+   }
+  },
+  {
+   "name": "prefsMts zero dropped",
+   "input": {
+    "areas": {},
+    "prefsMts": 0
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  },
+  {
+   "name": "unknown top-level keys dropped",
+   "input": {
+    "areas": {},
+    "gym": [
+     1,
+     2
+    ],
+    "v": 9,
+    "extra": true
+   },
+   "expected": {
+    "v": 4,
+    "areas": {
+     "pushup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "pullup": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "legraise": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "squat": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "bridge": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     },
+     "hspu": {
+      "step": 1,
+      "std": 0,
+      "mts": 0
+     }
+    },
+    "log": [],
+    "settings": {
+     "restSeconds": 180,
+     "ghostBase": null
+    },
+    "routine": {
+     "enabled": false,
+     "daysPerWeek": 3,
+     "sessionIndex": 0
+    },
+    "snapshots": [],
+    "milestones": [],
+    "deleted": [],
+    "prefsMts": 0
+   }
+  }
+ ]
+}

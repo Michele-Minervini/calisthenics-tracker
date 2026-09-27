@@ -62,13 +62,48 @@ None committed — just a menu for later:
 
 ## Working notes for future edits
 
-- **Bump `VERSION` in `sw.js` on every deploy** (`bigsix-vN`), or installed
-  copies keep serving the old cached files.
+- **Every deploy gets a new build: `sh tools/set-build.sh bigsix-vN`**, then
+  `git add -A` and `sh tests/run.sh` (README has the four steps). The service
+  worker only serves what it cached when its `VERSION` last changed — no
+  background refreshing, which could mix two releases — so without a new build
+  phones never see the change. The install downloads every file under a fresh
+  URL and rejects the release unless each stamped file really carries
+  `VERSION` (GitHub's CDN can serve a stale copy for a few minutes after a
+  push); a failed install leaves the previous release running and retries
+  later. If the cache is ever wiped (another app on the origin, or the
+  browser), the worker downloads the release again on the next miss.
+  `tests/static-test.js` fails when stamps disagree, when the page loads a file
+  that isn't cached or isn't in git, or when app files changed but the build
+  number didn't.
+- **"Finishing an update"** is what app.js shows, before touching storage, if
+  a launch ever gets files from two builds. Reload asks for the new release;
+  a second time in a row it drops this app's offline copy (never its data) and
+  loads from the network. Offline, it says so and reloads itself when the
+  connection returns.
+- **Cache names carry the app's path** (`bigsix-v16@/calisthenics-tracker/`),
+  and cleanup only deletes this path's old versions (plus the pre-stamp
+  `bigsix-vN` caches, and only when running at `/calisthenics-tracker/`, the
+  one place that created them). Cache Storage is shared by the whole
+  `michele-minervini.github.io` origin, so a global cleanup would wipe other
+  apps' — and, after the planned move to `/milo/`, the old or new address's —
+  offline copies. The korea-trip app on the same origin still does such a
+  global cleanup; the self-repair above covers it.
 - **When re-testing after a change, hard-reload / clear the service worker
   cache first** — a stale cache once made a correct fix look broken for a while.
 - **Never do date math by adding `86400000` ms.** Use the calendar-day helpers
-  (`startOfDay` / `addDays` / `dayDelta`) in `app.js`, or daylight-saving days
+  (`startOfDay` / `addDays` / `dayDelta`) in `model.js`, or daylight-saving days
   silently drop or duplicate.
+- **What gets stored is pinned by tests.** `model.js` holds the default state,
+  the sanitizers every load / restore / sync goes through, and the merge.
+  `tests/fixtures/sanitize-v4.json` (hand-written cases) and `recorded-v4.json`
+  (fingerprints of 400 random states and 300 merges, both orders) record their
+  exact output, taken from the code users had before the move;
+  `tests/model-test.js` and `tests/merge-test.js` fail on any change. A
+  deliberate change to the stored shape bumps `MODEL_VERSION` in `model.js`
+  and re-records with `node tools/record-fixtures.js`, which refuses to run
+  otherwise — never "fix the test" to match. Known and pinned on purpose: on
+  equal `prefsMts` the local side's settings win, so merge isn't yet symmetric
+  for settings; the next data version fixes it.
 - **The backup-link payload order is frozen** (`PAYLOAD_ORDER` in `app.js`) so
   old links keep importing correctly — never reuse the radar's axis order for it.
 - **Sync merges must stay commutative and idempotent.** Both devices run the
@@ -76,7 +111,7 @@ None committed — just a menu for later:
   have to produce byte-identical results — otherwise the two copies never
   compare equal and the devices push at each other forever. Every sort inside
   it falls back to the id for exactly this reason; a sort on timestamp alone is
-  not a total order. `merge-test.js` covers this.
+  not a total order. `tests/merge-test.js` covers this.
 - **The plan is derived, never stored.** `prescribe()` reads your current step
   and standard on every render. That is the whole reason the plan follows you
   when you level up — resist any urge to cache it, or it will go stale exactly

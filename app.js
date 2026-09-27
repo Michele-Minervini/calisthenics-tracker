@@ -30,6 +30,93 @@
 (function () {
   "use strict";
 
+  var BUILD = "bigsix-v16";
+  var UPDATE_TRIES_KEY = "bigsix.updateTries";   // must be set before the check below uses it
+
+  // Every file carries the same build stamp. If they disagree, the browser has
+  // handed us parts of two different releases (possible for one launch while an
+  // update installs). Running like that could store data in a shape half the
+  // code doesn't understand, so stop before touching storage and ask for a
+  // reload instead. Nothing below may run before this check.
+  var buildParts = {
+    page: document.documentElement.getAttribute("data-build"),
+    data: typeof DATA_BUILD === "undefined" ? null : DATA_BUILD,
+    model: typeof MODEL === "undefined" ? null : MODEL.BUILD,
+    qr: typeof QR === "undefined" ? null : QR.BUILD,
+    sync: typeof SYNC === "undefined" ? null : SYNC.BUILD
+  };
+  var staleParts = Object.keys(buildParts).filter(function (k) { return buildParts[k] !== BUILD; });
+  if (staleParts.length) { showUpdateScreen(staleParts); return; }
+  try { sessionStorage.removeItem(UPDATE_TRIES_KEY); } catch (e) { /* not important */ }
+
+  // The pure data code lives in model.js, where tests/ can run it; these are
+  // local names for it so the rest of this file reads as before.
+  var KNOWN_IDS = MODEL.KNOWN_IDS, DEFAULT_REST = MODEL.DEFAULT_REST;
+  var nowMs = MODEL.nowMs, pad2 = MODEL.pad2, dateStr = MODEL.dateStr, dateFromKey = MODEL.dateFromKey;
+  var startOfDay = MODEL.startOfDay, addDays = MODEL.addDays, dayDelta = MODEL.dayDelta, genId = MODEL.genId;
+  var defaultState = MODEL.defaultState, sanitizeState = MODEL.sanitizeState;
+  var variationByName = MODEL.variationByName;
+
+  // Plain DOM and inline styles on purpose: this runs when the other files —
+  // style.css included — can't be trusted to be from this release.
+  function showUpdateScreen(parts) {
+    var shell = document.querySelector(".wrap");
+    if (shell) shell.style.display = "none";   // don't leave a dead, empty app behind it
+    var offline = navigator.onLine === false;
+    var box = document.createElement("div");
+    box.className = "updatescreen";
+    box.setAttribute("role", "alert");
+    box.style.cssText = "position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;" +
+      "padding:24px;background:var(--page,#f9f9f7);color:var(--ink,#0b0b0b);font-family:system-ui,-apple-system,sans-serif";
+    var inner = document.createElement("div");
+    inner.style.cssText = "max-width:420px;display:flex;flex-direction:column;gap:12px";
+    var h = document.createElement("h2");
+    h.style.margin = "0";
+    h.textContent = "Finishing an update";
+    var p = document.createElement("p");
+    p.style.margin = "0";
+    p.textContent = offline
+      ? "You're offline, and part of the app is still from the previous version. Connect to the internet and it will finish updating by itself. Your data is safe — nothing has been changed."
+      : "Part of the app is still from the previous version. Reload to finish updating — your data is safe, nothing has been changed.";
+    var b = document.createElement("button");
+    b.className = "btn primary wide";
+    b.style.cssText = "padding:12px;border-radius:12px;font-weight:700";
+    b.textContent = "Reload";
+    b.addEventListener("click", finishUpdate);
+    var d = document.createElement("p");
+    d.style.cssText = "margin:0;font-size:12px;opacity:.7";
+    d.textContent = "Out of date: " + parts.join(", ") + " (expected " + BUILD + ")";
+    inner.appendChild(h); inner.appendChild(p); inner.appendChild(b); inner.appendChild(d);
+    box.appendChild(inner);
+    document.body.appendChild(box);
+    if (offline) window.addEventListener("online", function () { finishUpdate(); });
+  }
+
+  // First try: ask for the new release, then reload. If the same thing
+  // happens again straight after, the offline copy itself is inconsistent:
+  // drop this app's offline copy (never its data) and load from the network,
+  // after which the app installs itself again.
+  function finishUpdate() {
+    var tries = 0;
+    try {
+      tries = Number(sessionStorage.getItem(UPDATE_TRIES_KEY)) || 0;
+      sessionStorage.setItem(UPDATE_TRIES_KEY, String(tries + 1));
+    } catch (e) { /* no sessionStorage: behave as a first try */ }
+    var sw = navigator.serviceWorker;
+    if (!sw || navigator.onLine === false) { location.reload(); return; }
+    sw.getRegistration().then(function (reg) {
+      if (!reg) { location.reload(); return; }
+      if (tries < 1) {
+        return reg.update().catch(function () { /* offline */ }).then(function () { location.reload(); });
+      }
+      var suffix = "@" + new URL(reg.scope).pathname;
+      return reg.unregister().then(function () { return caches.keys(); }).then(function (keys) {
+        return Promise.all(keys.filter(function (k) { return k.slice(-suffix.length) === suffix; })
+          .map(function (k) { return caches.delete(k); }));
+      }).then(function () { location.reload(); });
+    }).catch(function () { location.reload(); });
+  }
+
   var STORE_KEY = "bigsix.v1";
   var SVGNS = "http://www.w3.org/2000/svg";
 
@@ -46,9 +133,6 @@
     return -1;
   }
 
-  var KNOWN_IDS = AREAS.map(function (a) { return a.id; });
-  var DEFAULT_REST = 180; // seconds
-
   // Guided routine presets: each is a list of sessions (a session = the areas
   // trained that day). Every preset covers all six movements once per cycle.
   var ROUTINE_PRESETS = {
@@ -62,28 +146,6 @@
 
   var memoryFallback = null;
   var storageOk = true;
-
-  function defaultState() {
-    var areas = {};
-    AREAS.forEach(function (a) { areas[a.id] = { step: 1, std: 0, mts: 0 }; });
-    return {
-      v: 4,
-      areas: areas,
-      log: [],
-      // ghostBase: a frozen { d, v } the "where I started" line measures from,
-      // or null for "all of my history". It's a copy rather than a pointer at a
-      // stored day because the day's snapshot keeps being rewritten as you
-      // train — and it lives in settings rather than being done by deleting old
-      // snapshots, because a sync merge unions snapshots by day and would just
-      // bring the deleted ones back from the other device.
-      settings: { restSeconds: DEFAULT_REST, ghostBase: null },
-      routine: { enabled: false, daysPerWeek: 3, sessionIndex: 0 },
-      snapshots: [],   // [{ d:"YYYY-MM-DD", v:[6 radar values] }] for the ghost radar
-      milestones: [],  // [{ id, ts, type:"advance"|"master", areaId, step }]
-      deleted: [],     // [{ id, ts }] tombstones so a delete survives a sync merge
-      prefsMts: 0
-    };
-  }
 
   // True when stored data existed but could not be read/understood. We then
   // avoid auto-writing over it, so a recoverable file isn't destroyed on load.
@@ -123,120 +185,6 @@
       memoryFallback = state;
       return false;
     }
-  }
-
-  // Accepts a v1 (progress-only) or v2 (with log + settings) object and always
-  // returns a clean v2 state. Invalid pieces are dropped, not fatal.
-  function sanitizeState(s) {
-    // areas must be a real object map — a truthy scalar/array would slip past a
-    // bare `!s.areas` check and let a corrupt file zero out all progress.
-    if (!s || typeof s !== "object" || !s.areas || typeof s.areas !== "object" || Array.isArray(s.areas)) return null;
-    var out = defaultState();
-    AREAS.forEach(function (a) {
-      var st = s.areas[a.id];
-      if (st && typeof st === "object") {
-        var step = Math.round(Number(st.step));
-        var std = Math.round(Number(st.std));
-        if (step >= 1 && step <= 10) out.areas[a.id].step = step;
-        if (std >= 0 && std <= 3) out.areas[a.id].std = std;
-        var mts = Number(st.mts);
-        if (isFinite(mts) && mts > 0) out.areas[a.id].mts = mts;
-      }
-    });
-    if (Array.isArray(s.log)) {
-      out.log = s.log.map(sanitizeLogEntry).filter(Boolean);
-    }
-    if (s.settings && typeof s.settings === "object") {
-      var rs = Math.round(Number(s.settings.restSeconds));
-      if (rs >= 5 && rs <= 3600) out.settings.restSeconds = rs;
-      // Same { d, v } shape as a snapshot, so the same validator does.
-      out.settings.ghostBase = sanitizeSnapshot(s.settings.ghostBase);
-    }
-    if (s.routine && typeof s.routine === "object") {
-      var dpw = Math.round(Number(s.routine.daysPerWeek));
-      if ([2, 3, 6].indexOf(dpw) !== -1) out.routine.daysPerWeek = dpw;
-      out.routine.enabled = !!s.routine.enabled;
-      var si = Math.round(Number(s.routine.sessionIndex));
-      if (si >= 0 && si < 50) out.routine.sessionIndex = si;
-    }
-    if (Array.isArray(s.snapshots)) {
-      out.snapshots = s.snapshots.map(sanitizeSnapshot).filter(Boolean).slice(-400);
-    }
-    // The first version of this feature stored only a date and read the values
-    // back out of that day's snapshot; carry those settings over.
-    if (!out.settings.ghostBase && s.settings && typeof s.settings.ghostFrom === "string" &&
-        /^\d{4}-\d{2}-\d{2}$/.test(s.settings.ghostFrom)) {
-      for (var gi = 0; gi < out.snapshots.length; gi++) {
-        if (out.snapshots[gi].d >= s.settings.ghostFrom) {
-          out.settings.ghostBase = { d: out.snapshots[gi].d, v: out.snapshots[gi].v.slice() };
-          break;
-        }
-      }
-    }
-    if (Array.isArray(s.milestones)) {
-      out.milestones = s.milestones.map(sanitizeMilestone).filter(Boolean).slice(-500);
-    }
-    if (Array.isArray(s.deleted)) {
-      out.deleted = s.deleted.map(sanitizeTombstone).filter(Boolean).slice(-400);
-    }
-    var pm = Number(s.prefsMts);
-    if (isFinite(pm) && pm > 0) out.prefsMts = pm;
-    return out;
-  }
-
-  function sanitizeTombstone(t) {
-    if (!t || typeof t !== "object") return null;
-    if (typeof t.id !== "string" || !/^[A-Za-z0-9_-]{1,40}$/.test(t.id)) return null;
-    var ts = Number(t.ts);
-    if (!isFinite(ts) || ts <= 0) ts = nowMs();
-    return { id: t.id, ts: ts };
-  }
-
-  function sanitizeSnapshot(sn) {
-    if (!sn || typeof sn !== "object") return null;
-    if (typeof sn.d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(sn.d)) return null;
-    if (!Array.isArray(sn.v) || sn.v.length !== AREAS.length) return null;
-    var v = sn.v.map(function (x) { var n = Number(x); return (isFinite(n) && n >= 0 && n <= 10) ? n : 0; });
-    return { d: sn.d, v: v };
-  }
-
-  function sanitizeMilestone(m) {
-    if (!m || typeof m !== "object") return null;
-    if (["advance", "master"].indexOf(m.type) === -1) return null;
-    if (KNOWN_IDS.indexOf(m.areaId) === -1) return null;
-    var step = Math.round(Number(m.step));
-    if (!(step >= 1 && step <= 10)) return null;
-    var ts = Number(m.ts); if (!isFinite(ts) || ts <= 0) ts = nowMs();
-    var id = (typeof m.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(m.id)) ? m.id : genId();
-    return { id: id, ts: ts, type: m.type, areaId: m.areaId, step: step };
-  }
-
-  function sanitizeLogEntry(e) {
-    if (!e || typeof e !== "object") return null;
-    if (KNOWN_IDS.indexOf(e.areaId) === -1) return null;
-    var step = Math.round(Number(e.step));
-    if (!(step >= 1 && step <= 10)) return null;
-    if (!Array.isArray(e.sets)) return null;
-    var sets = [];
-    e.sets.forEach(function (x) {
-      var v = Math.round(Number(x));
-      if (isFinite(v) && v >= 0) sets.push(v);
-    });
-    if (!sets.length) return null;
-    var ts = Number(e.ts);
-    if (!isFinite(ts) || ts <= 0) ts = nowMs();
-    var date = (typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)) ? e.date : dateStr(ts);
-    // Restrict ids to a safe charset so a hand-crafted backup can't inject markup.
-    var id = (typeof e.id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(e.id)) ? e.id : genId();
-    var note = (typeof e.note === "string") ? e.note.slice(0, 280) : "";
-    // Entries written before sync existed have no mts; treat the session time as
-    // their last edit, so a genuinely edited copy on another device wins.
-    var mts = Number(e.mts);
-    if (!isFinite(mts) || mts <= 0) mts = ts;
-    // Which variation was done, if not the step's own exercise. Only names the
-    // data file knows are kept, so a hand-edited backup can't inject markup.
-    var variant = (typeof e.variant === "string" && variationByName(e.areaId, e.variant)) ? e.variant : "";
-    return { id: id, ts: ts, date: date, areaId: e.areaId, step: step, sets: sets, note: note, mts: mts, variant: variant };
   }
 
   var state = loadState();
@@ -297,37 +245,6 @@
 
   var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- Dates / ids ---------- */
-
-  function nowMs() { return new Date().getTime(); }
-  function pad2(n) { return (n < 10 ? "0" : "") + n; }
-  function dateStr(ts) {
-    var d = new Date(ts);
-    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
-  }
-
-  /* Calendar-day arithmetic. Never step days by adding 86400000 ms: across a
-     daylight-saving change consecutive local midnights are 23h or 25h apart,
-     which silently drops or duplicates a day. setDate() moves whole calendar
-     days regardless of clock changes. */
-  function startOfDay(ts) {
-    var d = new Date(ts);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  function addDays(date, n) {
-    var d = new Date(date.getTime());
-    d.setDate(d.getDate() + n);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  // Whole calendar days between two local midnights (rounding absorbs 23h/25h days).
-  function dayDelta(fromTs, toTs) {
-    return Math.round((startOfDay(toTs).getTime() - startOfDay(fromTs).getTime()) / 86400000);
-  }
-  function genId() {
-    return "s" + nowMs().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-  }
   function prettyDate(ts) {
     var dd = dateStr(ts);
     var today = startOfDay(nowMs());
@@ -509,12 +426,6 @@
     return list.filter(function (v) { return step >= v.from && step <= v.to; });
   }
 
-  function variationByName(areaId, name) {
-    var list = (typeof VARIATIONS !== "undefined" && VARIATIONS[areaId]) || [];
-    for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
-    return null;
-  }
-
   function warmupFor(areaId) {
     return (typeof WARMUPS !== "undefined" && WARMUPS[areaId]) || [];
   }
@@ -612,10 +523,6 @@
       prev = cur;
     });
     return best;
-  }
-  function dateFromKey(k) {
-    var p = k.split("-");
-    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).getTime();
   }
 
   /* ---------- Smart nudge ---------- */
@@ -1894,6 +1801,7 @@
       '<div class="btnrow">' +
       (syncCfg ? '<button class="btn danger" id="syncOffBtn">Turn off sync here</button>' : "") +
       '<button class="btn danger" id="resetBtn">Reset all progress</button></div>' +
+      '<p class="hint buildline">Build ' + esc(BUILD) + " &middot; data v" + esc(String(state.v)) + "</p>" +
       "</div></details>" +
       "</div>";
   }
@@ -2526,7 +2434,14 @@
 
   if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
     window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () { /* offline support is optional */ });
+      navigator.serviceWorker.register("sw.js").then(function (reg) {
+        // An iPhone home-screen app coming back from the background doesn't
+        // reload the page, so the browser never looks for a new version on
+        // its own. Ask whenever the app comes back to the foreground.
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) reg.update().catch(function () { /* offline */ });
+        });
+      }).catch(function () { /* offline support is optional */ });
     });
   }
 })();

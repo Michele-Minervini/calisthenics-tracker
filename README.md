@@ -61,9 +61,11 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 | `style.css` | All styling (light + dark theme) |
 | `data.js` | The content: 60 exercises with rep goals, 38 variations, warm-ups |
 | `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
+| `model.js` | The data rules: what a saved state looks like, how it's cleaned on load, how two devices merge |
 | `qrcode.js` | Self-contained QR-code generator (no dependencies) |
-| `sync.js` | Optional cloud sync: talks to your database, merges two devices |
-| `merge-test.js` | Checks the sync merge rules — run with `node merge-test.js` |
+| `sync.js` | Optional cloud sync: talks to your database |
+| `tests/` | Automated checks — run with `sh tests/run.sh` (see below) |
+| `tools/set-build.sh` | Sets the release number everywhere it must match |
 | `sw.js` | Service worker — makes the app work offline |
 | `manifest.webmanifest` + `icons/` | App name/icon for "Add to Home Screen" |
 
@@ -150,17 +152,49 @@ keep themselves up to date.
 - **It costs nothing to leave on.** A day of training is a handful of requests
   against an allowance of 10 GB of downloads a month.
 
+## Check your changes
+
+```bash
+sh tests/run.sh
+```
+
+It runs every check twice (Italian and US time, because date bugs hide in the
+daylight-saving weeks) and ends with "All tests passed." The checks cover what
+gets stored on load, how two devices merge, that every file the page needs is
+available offline, and that a release is ready to ship. They need Node.js —
+this Mac has it; on another computer, if `node --version` prints nothing,
+install it from nodejs.org.
+
 ## Update the live site
+
+Every release gets a new build number: one higher than the current one (the
+`VERSION` at the top of `sw.js`; the tests tell you the right number if you
+forget). Four steps:
+
+```bash
+sh tools/set-build.sh bigsix-v17
+```
 
 ```bash
 git add -A
-git commit -m "describe what changed"
-git push
 ```
 
-…and the site updates itself in about a minute. **When you change any file,
-also bump `VERSION` in `sw.js`** (v1 → v2 → …) so phones that installed the
-app pick up the update.
+```bash
+sh tests/run.sh
+```
+
+```bash
+git commit -m "describe what changed" && git push
+```
+
+The site updates itself in about a minute. An installed copy takes **two
+opens** to switch: the first open, online, downloads the new release in the
+background while still showing the old one; the next open shows it. On an
+iPhone: open the app, wait a few seconds, swipe it away in the app switcher,
+open it again. Settings → More shows which build a device is running.
+**Skipping the build number means phones never update**, because the app is
+served from an offline copy that only changes when the number does — the tests
+catch that before you push.
 
 ## Ideas for later (v3+)
 

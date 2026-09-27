@@ -339,5 +339,6 @@ var QR = (function () {
     return best;
   }
 
-  return { generate: generate };
+  // Build stamp: app.js refuses to run on files from two different releases.
+  return { generate: generate, BUILD: "bigsix-v16" };
 })();

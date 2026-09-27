@@ -15,7 +15,8 @@
      entire security model, so treat the code like a password.
    - localStorage stays the source of truth. Sync is a background
      extra: with no network, the app behaves exactly as before.
-   - Two devices are reconciled by merge(), never by overwrite.
+   - Two devices are reconciled by MODEL.merge() (model.js), never
+     by overwrite.
 
    Everything here is deliberately dependency-free and side-effect
    free apart from the two localStorage calls for the config.
@@ -28,6 +29,7 @@ var SYNC = (function () {
   // code must never travel inside a backup file or a shared progress link.
   var CONFIG_KEY = "bigsix.sync";
   var TIMEOUT_MS = 15000;
+  var BUILD = "bigsix-v16";
   var MAX_BLOB = 900000; // keep well under the 1 MB the database rules allow
 
   // A pairing link may be scanned from a QR code, i.e. it is untrusted input.
@@ -203,133 +205,6 @@ var SYNC = (function () {
     });
   }
 
-  /* ---------- Merge ---------- */
-
-  /* Reconciles two states without a server-side arbiter. Every rule below is
-     commutative and idempotent, so both devices reach the same result no
-     matter which one merges first or how often:
-
-       sessions    union by id; the copy with the newer mts wins an edit clash
-       deletions   tombstones win, unless the entry was edited after the delete
-       areas       the side with the newer mts wins (ties: the higher position)
-       milestones  union by id, then de-duplicated by what they commemorate
-       snapshots   one per day, component-wise maximum
-       prefs       settings and routine move together, newest prefsMts wins
-  */
-  function merge(local, remote) {
-    if (!remote) return local;
-    if (!local) return remote;
-
-    var out = {
-      v: 4,
-      areas: {},
-      log: [],
-      settings: null,
-      routine: null,
-      snapshots: [],
-      milestones: [],
-      deleted: [],
-      prefsMts: Math.max(Number(local.prefsMts) || 0, Number(remote.prefsMts) || 0)
-    };
-
-    // --- areas ---
-    Object.keys(local.areas).forEach(function (id) {
-      var a = local.areas[id];
-      var b = remote.areas && remote.areas[id];
-      out.areas[id] = b ? pickArea(a, b) : a;
-    });
-
-    // --- tombstones ---
-    var tomb = {};
-    concat(local.deleted, remote.deleted).forEach(function (t) {
-      if (!tomb[t.id] || t.ts > tomb[t.id]) tomb[t.id] = t.ts;
-    });
-
-    // --- sessions ---
-    var byId = {};
-    concat(local.log, remote.log).forEach(function (e) {
-      var prev = byId[e.id];
-      if (!prev || newerEntry(e, prev)) byId[e.id] = e;
-    });
-    Object.keys(byId).forEach(function (id) {
-      var e = byId[id];
-      // A delete beats the entry it removed, but not an edit made afterwards.
-      if (tomb[id] && tomb[id] >= (e.mts || e.ts)) return;
-      out.log.push(e);
-    });
-    // Every sort here falls back to the id. Sorting on the timestamp alone is
-    // not a total order — two sessions logged in the same millisecond would
-    // come out in a different order on each device, the two copies would never
-    // compare equal, and they would push at each other forever.
-    out.log.sort(function (x, y) { return (x.ts - y.ts) || cmp(x.id, y.id); });
-
-    // Tombstones for entries nobody has any more are still worth keeping for a
-    // while: a device that has been offline for months may still hold the entry.
-    var tombIds = Object.keys(tomb);
-    tombIds.sort(function (x, y) { return (tomb[x] - tomb[y]) || cmp(x, y); });
-    out.deleted = tombIds.slice(-400).map(function (id) { return { id: id, ts: tomb[id] }; });
-
-    // --- milestones ---
-    var mById = {};
-    concat(local.milestones, remote.milestones).forEach(function (m) {
-      if (!mById[m.id] || m.ts < mById[m.id].ts) mById[m.id] = m;
-    });
-    // The same achievement earned on two devices gets two different random ids,
-    // so collapse by what it commemorates and keep the earliest.
-    var mByWhat = {};
-    Object.keys(mById).sort().forEach(function (id) {
-      var m = mById[id];
-      var key = m.type + "|" + m.areaId + "|" + m.step;
-      var prev = mByWhat[key];
-      if (!prev || m.ts < prev.ts || (m.ts === prev.ts && m.id < prev.id)) mByWhat[key] = m;
-    });
-    out.milestones = Object.keys(mByWhat).map(function (k) { return mByWhat[k]; })
-      .sort(function (x, y) { return (x.ts - y.ts) || cmp(x.id, y.id); })
-      .slice(-500);
-
-    // --- snapshots ---
-    var byDay = {};
-    concat(local.snapshots, remote.snapshots).forEach(function (sn) {
-      var prev = byDay[sn.d];
-      if (!prev) { byDay[sn.d] = { d: sn.d, v: sn.v.slice() }; return; }
-      for (var i = 0; i < sn.v.length && i < prev.v.length; i++) {
-        if (sn.v[i] > prev.v[i]) prev.v[i] = sn.v[i];
-      }
-    });
-    out.snapshots = Object.keys(byDay).sort().map(function (d) { return byDay[d]; }).slice(-400);
-
-    // --- settings + routine ---
-    var localNewer = (Number(local.prefsMts) || 0) >= (Number(remote.prefsMts) || 0);
-    var prefsFrom = localNewer ? local : remote;
-    out.settings = prefsFrom.settings;
-    out.routine = prefsFrom.routine;
-
-    return out;
-  }
-
-  function concat(a, b) {
-    return (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []);
-  }
-
-  function cmp(a, b) { return a < b ? -1 : (a > b ? 1 : 0); }
-
-  function pickArea(a, b) {
-    var am = Number(a.mts) || 0, bm = Number(b.mts) || 0;
-    if (am > bm) return a;
-    if (bm > am) return b;
-    // Same millisecond (or both pre-date sync): break the tie by position so
-    // the two devices can't disagree about the winner.
-    var av = (a.step - 1) + a.std / 3, bv = (b.step - 1) + b.std / 3;
-    return bv > av ? b : a;
-  }
-
-  function newerEntry(e, prev) {
-    var em = e.mts || e.ts, pm = prev.mts || prev.ts;
-    if (em !== pm) return em > pm;
-    // Deterministic tie-break, so the merge is order-independent.
-    return JSON.stringify(e) > JSON.stringify(prev);
-  }
-
   return {
     getConfig: getConfig,
     setConfig: setConfig,
@@ -341,6 +216,9 @@ var SYNC = (function () {
     parsePairing: parsePairing,
     pull: pull,
     push: push,
-    merge: merge
+    // The merge lives with the rest of the data model; kept here so callers
+    // and tests that know it as SYNC.merge keep working.
+    merge: function (local, remote) { return MODEL.merge(local, remote); },
+    BUILD: BUILD
   };
 })();

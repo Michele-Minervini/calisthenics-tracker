@@ -1,30 +1,15 @@
 /* Exercises SYNC.merge() against the scenarios that actually happen:
    two devices logging while apart, edits, deletes, conflicting steps,
-   and the convergence property (merge order must not matter). */
+   and the convergence property (merge order must not matter).
+   Run with: sh tests/run.sh   (or: node tests/merge-test.js) */
 
-const fs = require("fs");
-const path = require("path");
-const REPO = __dirname;
+const h = require("./harness");
+const { check } = h;
 
-// Minimal browser shims so sync.js can be eval'd as-is.
-global.window = { crypto: require("crypto").webcrypto };
-global.localStorage = {
-  _m: {},
-  getItem(k) { return Object.prototype.hasOwnProperty.call(this._m, k) ? this._m[k] : null; },
-  setItem(k, v) { this._m[k] = String(v); },
-  removeItem(k) { delete this._m[k]; }
-};
-global.URL = URL;
-global.Uint8Array = Uint8Array;
-eval(fs.readFileSync(path.join(REPO, "sync.js"), "utf8"));
+// The real browser scripts, loaded as the page loads them.
+const SYNC = h.load(["data.js", "model.js", "sync.js"]).get("SYNC");
 
 const AREA_IDS = ["pushup", "squat", "pullup", "legraise", "bridge", "hspu"];
-let fails = 0, passes = 0;
-
-function check(name, cond, extra) {
-  if (cond) { passes++; console.log("  ok   " + name); }
-  else { fails++; console.log("  FAIL " + name + (extra ? "\n       " + extra : "")); }
-}
 
 function baseState() {
   const areas = {};
@@ -241,5 +226,52 @@ const hour = 3600000;
   check("generated code is 24 chars", /^[A-Za-z0-9]{24}$/.test(SYNC.makeCode()));
 }
 
-console.log("\n" + passes + " passed, " + fails + " failed");
-process.exit(fails ? 1 : 0);
+/* ---- Recorded behaviour: every merge rule, both orders, 300 random pairs ---- */
+{
+  const fs = require("fs");
+  const path = require("path");
+  const rec = require("./record");
+  const MODEL = h.load(["data.js", "model.js"]).get("MODEL");
+  const file = path.join(__dirname, "fixtures", "recorded-v" + MODEL.MODEL_VERSION + ".json");
+  const RECORDED = JSON.parse(fs.readFileSync(file, "utf8"));
+  const impl = h.load(["data.js", "model.js", "sync.js"], { now: RECORDED.now, seed: RECORDED.seed });
+  const M = impl.get("MODEL");
+  const got = rec.mergeFingerprints({ sanitizeState: M.sanitizeState, defaultState: M.defaultState, merge: impl.get("SYNC").merge });
+  const first = got.findIndex((p, i) => JSON.stringify(p) !== JSON.stringify(RECORDED.merge[i]));
+  check("merge output identical to the recording for all " + got.length + " pairs, both orders", first === -1,
+    first === -1 ? "" : "first difference at pair " + first + " (tests/record.js mergePairs()[" + first + "])");
+}
+
+/* ---- The tie rules, spelled out ---- */
+{
+  // A delete stamped in the same millisecond as the entry's last edit wins.
+  const a = baseState(); a.log.push(entry("t1", T, "pushup", [5], T + 10));
+  const b = baseState(); b.deleted.push({ id: "t1", ts: T + 10 });
+  check("tombstone at exactly the edit time deletes", SYNC.merge(a, b).log.length === 0 && SYNC.merge(b, a).log.length === 0);
+  const c = baseState(); c.deleted.push({ id: "t1", ts: T + 9 });
+  check("tombstone older than the edit loses", SYNC.merge(a, c).log.length === 1);
+
+  // Same id, same mts, different content: the larger JSON wins, whichever side.
+  const x = baseState(); x.log.push(entry("t2", T, "pushup", [5], T + 1));
+  const y = baseState(); y.log.push(entry("t2", T, "pushup", [9], T + 1));
+  const xy = SYNC.merge(x, y), yx = SYNC.merge(y, x);
+  check("equal-mts edit clash is order-independent", JSON.stringify(xy.log) === JSON.stringify(yx.log));
+  check("equal-mts edit clash keeps the larger JSON", JSON.stringify(xy.log[0].sets) === "[9]");
+
+  // Same milestone id, two timestamps: the earliest is kept.
+  const m1 = baseState(); m1.milestones.push({ id: "mx", ts: T + 5, type: "advance", areaId: "pushup", step: 3 });
+  const m2 = baseState(); m2.milestones.push({ id: "mx", ts: T, type: "advance", areaId: "pushup", step: 3 });
+  check("same milestone id keeps the earliest ts", SYNC.merge(m1, m2).milestones[0].ts === T && SYNC.merge(m2, m1).milestones[0].ts === T);
+
+  // Settings: newer prefsMts wins; on a tie the LOCAL side currently wins.
+  // (Known asymmetry, pinned here on purpose; the next data version fixes it.)
+  const p1 = baseState(); p1.settings = { restSeconds: 120 }; p1.prefsMts = T;
+  const p2 = baseState(); p2.settings = { restSeconds: 300 }; p2.prefsMts = T;
+  check("equal prefsMts: local settings win (current behaviour)",
+    SYNC.merge(p1, p2).settings.restSeconds === 120 && SYNC.merge(p2, p1).settings.restSeconds === 300);
+  p2.prefsMts = T + 1;
+  check("newer prefsMts wins either way",
+    SYNC.merge(p1, p2).settings.restSeconds === 300 && SYNC.merge(p2, p1).settings.restSeconds === 300);
+}
+
+h.done(__filename);
