@@ -119,6 +119,35 @@ None committed — just a menu for later:
 - **An easier variation must never award a standard.** Variations are tagged
   `easier` / `same` / `harder` in `data.js`; `saveLog` skips the auto-detection
   for `easier` ones. Otherwise slow negatives would "earn" a step you can't do.
+- **Data v5 (September 2026) and the sync cutover.** `model.js` defines the
+  stored shape (top of the file). Log entries have kinds — calisthenics (no
+  `kind`), `gym`, `quick`, `body` — so gym tracking can build on it; settings
+  merge per field via `pm` stamps; merge is commutative, idempotent and
+  associative (tests/merge-test.js checks all three on random states). Sync
+  writes only `/u/<code>m5`; the old `/u/<code>` record is read-only and still
+  merged in (training only, never settings) whenever an old copy of the app
+  writes to it — until P7 retires that read (target: 60 days after cutover).
+- **Settings carried over from v4 never beat a v5 choice.** Migration stamps
+  them at the old `prefsMts`, capped at `MODEL.MIGRATED_PREFS_MAX` (the v5
+  release instant), and every v5 change is stamped after it (`stampPref`).
+  Otherwise an old copy still running after the update (an iPhone home-screen
+  app resumes rather than reloads) could touch its rest timer and, once it
+  migrated, undo a routine picked in v5. Don't move that constant.
+- **Names from stored data are never used as plain-object keys.** Ids, split
+  and equipment names pass format checks that "constructor" and "__proto__"
+  also pass; lookup tables keyed by them are `Object.create(null)` (model.js
+  `dict()`), such names are refused where a table is keyed by a setting
+  (`plainName`), and app.js looks presets up by own key only.
+- **Never strip data from a newer version.** `MODEL.isNewer()` guards every
+  entry point: sync (the cloud is newer → pause, don't push), load (stored data
+  is newer → read-only + banner, never save), another tab (same), restore
+  (refused). Any change to the stored shape must bump `MODEL_VERSION`, so
+  these guards can recognise it — and ship on its own, fix forward, never
+  revert across a bump.
+- **Reset / replace-from-backup mark themselves** (`milo.replaceAt`) so other
+  open tabs adopt the result instead of merging the removed sessions back.
+  With sync on, other devices still merge them back — that's inherent to a
+  union merge and the dialogs say so.
 - **Anything arriving from the network goes through `sanitizeState()`** before
   it is merged, same as a restored backup file. Treat the cloud copy as
   untrusted input, because anyone holding the sync code can write to it.

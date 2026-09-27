@@ -1,21 +1,13 @@
 /* ============================================================
    Big Six Tracker — app logic
    Plain JavaScript, no dependencies.
-   State shape (v4, migrates from v1/v2/v3 automatically):
-   {
-     v: 4,
-     areas: { [areaId]: { step: 1..10, std: 0..3, mts } },
-     log:   [ { id, ts, date:"YYYY-MM-DD", areaId, step, sets:[n,...], note, mts } ],
-     settings: { restSeconds },
-     routine: { enabled, daysPerWeek: 2|3|6, sessionIndex },
-     snapshots: [ { d:"YYYY-MM-DD", v:[6 radar values] } ],   // ghost radar
-     milestones: [ { id, ts, type:"advance"|"master", areaId, step } ],
-     deleted: [ { id, ts } ],   // tombstones for deleted sessions
-     prefsMts: 0                // last change to settings/routine
-   }
-   The `mts` (modified-at) fields and `deleted` exist only for cloud sync
-   (sync.js): they let two devices be merged without losing or resurrecting
-   anything. Nothing in the UI reads them.
+   The stored state (data v5) is described at the top of model.js, which
+   also holds everything that validates, migrates and merges it. Older
+   shapes migrate automatically on load. The `mts` / `pm` stamps and
+   `deleted` tombstones exist only for sync: they let two devices merge
+   without losing or resurrecting anything. Nothing in the UI reads them.
+   Log entries come in kinds: calisthenics sessions (no `kind`), and gym,
+   quick-log and weigh-in entries — this version only displays those.
    std: 0 = working on it, 1 = beginner met, 2 = intermediate met,
         3 = progression (or elite) met.
    Radar value per area = (step - 1) + std / 3  →  0..10 rings filled.
@@ -30,7 +22,7 @@
 (function () {
   "use strict";
 
-  var BUILD = "bigsix-v16";
+  var BUILD = "bigsix-v17";
   var UPDATE_TRIES_KEY = "bigsix.updateTries";   // must be set before the check below uses it
 
   // Every file carries the same build stamp. If they disagree, the browser has
@@ -92,6 +84,22 @@
     if (offline) window.addEventListener("online", function () { finishUpdate(); });
   }
 
+  // A strip at the top of the page for conditions that stop the app saving.
+  function showBanner(kind) {
+    var b = document.getElementById("banner");
+    var text = {
+      // Stored data here is newer than this code: nothing may be saved.
+      newer: "This device has data from a newer version of the app. Nothing is saved or synced here until it updates.",
+      // Only the cloud is newer: this device keeps saving, sync waits.
+      "newer-remote": "The app was updated on another device. Reload to update this one too — until then it saves here but doesn't sync."
+    }[kind];
+    if (!b || !text) return;
+    b.innerHTML = "<span>" + text + "</span>" +
+      '<button class="btn" type="button">Reload</button>';
+    b.querySelector("button").addEventListener("click", finishUpdate);
+    b.hidden = false;
+  }
+
   // First try: ask for the new release, then reload. If the same thing
   // happens again straight after, the offline copy itself is inconsistent:
   // drop this app's offline copy (never its data) and load from the network,
@@ -135,12 +143,27 @@
 
   // Guided routine presets: each is a list of sessions (a session = the areas
   // trained that day). Every preset covers all six movements once per cycle.
+  // Keyed by the stored split name. A split this version doesn't know (added by
+  // a newer version) shows as no routine here, but is kept as it is.
   var ROUTINE_PRESETS = {
-    2: [["pushup", "pullup", "legraise"], ["squat", "bridge", "hspu"]],
-    3: [["pushup", "squat"], ["pullup", "legraise"], ["hspu", "bridge"]],
-    6: [["pushup"], ["squat"], ["pullup"], ["legraise"], ["bridge"], ["hspu"]]
+    bb2: [["pushup", "pullup", "legraise"], ["squat", "bridge", "hspu"]],
+    bb3: [["pushup", "squat"], ["pullup", "legraise"], ["hspu", "bridge"]],
+    bb6: [["pushup"], ["squat"], ["pullup"], ["legraise"], ["bridge"], ["hspu"]]
   };
-  function routineSessions() { return ROUTINE_PRESETS[state.routine.daysPerWeek] || ROUTINE_PRESETS[3]; }
+  function routineSessions() {
+    var s = state.routine.split;
+    return Object.prototype.hasOwnProperty.call(ROUTINE_PRESETS, s) ? ROUTINE_PRESETS[s] : null;
+  }
+  function routineOn() { return !!routineSessions(); }
+
+  // Every preference change goes through here: the stamp lets each setting
+  // sync on its own, so changing the rest timer on the phone can't undo a
+  // routine chosen on the laptop.
+  function setPref(field, value) {
+    var box = MODEL.SETTINGS_FIELDS.indexOf(field) !== -1 ? state.settings : state.routine;
+    box[field] = value;
+    state.pm[field] = MODEL.stampPref(state.pm[field]);
+  }
 
   /* ---------- State ---------- */
 
@@ -150,6 +173,14 @@
   // True when stored data existed but could not be read/understood. We then
   // avoid auto-writing over it, so a recoverable file isn't destroyed on load.
   var loadFailed = false;
+
+  // True when this device holds data written by a NEWER version of the app
+  // (another tab, or a half-finished update). Saving would strip what the
+  // newer version added, so nothing is saved or synced until a reload.
+  var readOnly = false;
+
+  var RECOVER_KEY = "milo.recover";     // stored data that couldn't be read
+  var PRE_UPDATE_KEY = "milo.pre5";     // the data as it was before data v5
 
   function loadState() {
     var raw = null;
@@ -162,19 +193,88 @@
     }
     if (!raw) return defaultState();
     try {
-      var clean = sanitizeState(JSON.parse(raw));
-      if (!clean) { loadFailed = true; return defaultState(); }
+      var parsed = JSON.parse(raw);
+      if (MODEL.isNewer(parsed)) {
+        // Show what we can (a copy, read as this version), but never save it.
+        readOnly = true;
+        var view = JSON.parse(raw);
+        view.v = MODEL.MODEL_VERSION;
+        return sanitizeState(view) || defaultState();
+      }
+      var clean = sanitizeState(parsed);
+      if (!clean) { loadFailed = true; keepCopy(RECOVER_KEY, raw, true); return defaultState(); }
       return clean;
     } catch (e) {
       loadFailed = true;
+      keepCopy(RECOVER_KEY, raw, true);
       return defaultState();
     }
+  }
+
+  // Why a change wasn't saved, in the words the user needs.
+  function notSavedMsg() {
+    return readOnly
+      ? "Not saved — this device needs the newer version of the app first (see the top of the page)"
+      : "Saved in this tab only — storage is full or blocked";
+  }
+
+  // A deliberate "replace everything" (restore-replace, reset). Other open tabs
+  // normally MERGE what this tab saves — which would put back everything just
+  // removed. This marker tells them to adopt the new data as it is instead.
+  var REPLACE_KEY = "milo.replaceAt";
+  var seenReplaceAt = 0;
+  try { seenReplaceAt = Number(localStorage.getItem(REPLACE_KEY)) || 0; } catch (e) { /* no storage */ }
+  function setReplaceMarker(at) {
+    seenReplaceAt = at;
+    try { localStorage.setItem(REPLACE_KEY, String(at)); } catch (e) { /* best effort */ }
+  }
+  // Saves the state as a replacement. The marker goes first (other tabs read
+  // it when the data arrives), and is put back if the save fails, so a later
+  // ordinary save isn't mistaken for a replace.
+  function saveReplacing() {
+    var prev = seenReplaceAt;
+    setReplaceMarker(MODEL.stamp(prev));
+    if (saveState()) return true;
+    setReplaceMarker(prev);
+    return false;
+  }
+
+  // With sync on, removing things only works on this device: the others still
+  // have them and merge them back in. Say so where it matters.
+  function syncCaveat() {
+    return syncCfg ? "\n\nSync is on: your other devices still have their sessions and will add them back here. To start over everywhere, turn sync off on every device first." : "";
+  }
+
+  // Keeps a raw copy under a side key. once: never replace an existing copy.
+  function keepCopy(key, raw, replace) {
+    try {
+      var cur = localStorage.getItem(key);
+      if (cur === raw || (cur && !replace)) return;
+      localStorage.setItem(key, raw);
+    } catch (e) { /* storage full: the copy is a nicety, not required */ }
+  }
+
+  // The data version at the start of a stored string, without parsing it all.
+  function storedVersion(raw) {
+    var m = /^\{"v":"?(\d+)/.exec(raw);
+    if (m) return Number(m[1]);
+    try { var p = JSON.parse(raw); return Number(p && p.v) || 0; } catch (e) { return 0; }
   }
 
   // Returns true when the write actually landed. (User-initiated saves always
   // proceed; only the automatic boot-time write is suppressed after a bad load.)
   function saveState() {
+    if (readOnly) { showBanner("newer"); return false; }
     try {
+      var stored = localStorage.getItem(STORE_KEY);
+      if (stored) {
+        var sv = storedVersion(stored);
+        // Another tab may have written newer data since this one loaded.
+        if (sv > MODEL.MODEL_VERSION) { readOnly = true; showBanner("newer"); return false; }
+        // The first save in the new format keeps the old data once, untouched,
+        // so the update can always be undone by hand (Settings → More).
+        if (sv < MODEL.MODEL_VERSION) keepCopy(PRE_UPDATE_KEY, stored, false);
+      }
       localStorage.setItem(STORE_KEY, JSON.stringify(state));
       storageOk = true;
       // Single hook for cloud sync: every change to the state lands here.
@@ -304,11 +404,14 @@
     return entry;
   }
   function deleteLogEntry(id) {
-    state.log = state.log.filter(function (e) { return e.id !== id; });
+    var gone = null;
+    state.log = state.log.filter(function (e) { if (e.id === id) gone = e; return e.id !== id; });
     // Remember the deletion. Without this, syncing with a device that still has
-    // the entry would quietly bring it back.
-    state.deleted.push({ id: id, ts: nowMs() });
-    if (state.deleted.length > 400) state.deleted = state.deleted.slice(-400);
+    // the entry would quietly bring it back. The stamp is later than the
+    // entry's last edit even if this device's clock runs behind, so the delete
+    // is guaranteed to win.
+    state.deleted.push({ id: id, ts: MODEL.stamp(gone ? (gone.mts || gone.ts) : 0) });
+    if (state.deleted.length > MODEL.CAPS.deleted) state.deleted = state.deleted.slice(-MODEL.CAPS.deleted);
     saveState();
   }
   function sessionsForStep(areaId, step) {
@@ -386,14 +489,13 @@
   }
   // Stamp an area / the preferences as changed now, so a sync merge can tell
   // which device's version of a conflicting value is the newer one.
-  function touchArea(areaId) { state.areas[areaId].mts = nowMs(); }
-  function touchPrefs() { state.prefsMts = nowMs(); }
+  function touchArea(areaId) { state.areas[areaId].mts = MODEL.stamp(state.areas[areaId].mts); }
 
   // Central point for changing an area's step/std so milestones are recorded once.
   function setAreaProgress(areaId, newStep, newStd) {
     var old = state.areas[areaId];
     var oldStep = old.step;
-    state.areas[areaId] = { step: newStep, std: newStd, mts: nowMs() };
+    state.areas[areaId] = { step: newStep, std: newStd, mts: MODEL.stamp(old.mts) };
     if (newStep > oldStep) {
       // Don't re-record a step already in the timeline (e.g. stepping back down
       // with "set as my current step" and then climbing again).
@@ -416,7 +518,7 @@
 
   // The movements scheduled for today, or [] when no routine is set.
   function todaysMovements() {
-    if (!state.routine.enabled) return [];
+    if (!routineOn()) return [];
     var sessions = routineSessions();
     return sessions[state.routine.sessionIndex % sessions.length] || [];
   }
@@ -584,7 +686,7 @@
 
   function startRest(seconds) {
     restEnd = nowMs() + seconds * 1000;
-    if (state.settings.restSeconds !== seconds) { state.settings.restSeconds = seconds; touchPrefs(); saveState(); }
+    if (state.settings.restSeconds !== seconds) { setPref("restSeconds", seconds); saveState(); }
     var sr = $("#sr-live"); if (sr) sr.textContent = ""; // reset so the next "complete" re-announces
     ensureAudio();
     var pill = $("#restpill");
@@ -614,19 +716,45 @@
 
   /* ---------- Backup file (full state: progress + history) ---------- */
 
-  function downloadBackup() {
+  // Saves text as a file. In an installed iPhone app a plain download can do
+  // nothing at all, so there the share sheet is used ("Save to Files").
+  function saveTextFile(text, filename, doneMsg) {
     try {
-      var blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      var standalone = navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+      if (standalone && typeof File !== "undefined" && navigator.canShare) {
+        var file = new File([text], filename, { type: "application/json" });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: filename }).then(function () { toast(doneMsg); }, function () { /* cancelled */ });
+          return;
+        }
+      }
+      var blob = new Blob([text], { type: "application/json" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
       a.href = url;
-      a.download = "bigsix-backup-" + dateStr(nowMs()) + ".json";
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-      toast("Backup downloaded ✓");
-    } catch (e) { toast("Couldn't create the backup file"); }
+      toast(doneMsg);
+    } catch (e) { toast("Couldn't create the file"); }
+  }
+
+  function downloadBackup() {
+    var text = JSON.stringify(state, null, 2);
+    // When the stored data couldn't be read, or is from a newer version, the
+    // state in memory isn't the whole story: save exactly what is stored.
+    if (readOnly || loadFailed) {
+      try { text = localStorage.getItem(STORE_KEY) || text; } catch (e) { /* keep the in-memory copy */ }
+    }
+    saveTextFile(text, "bigsix-backup-" + dateStr(nowMs()) + ".json", "Backup saved ✓");
+  }
+
+  // Side copies kept automatically (see loadState / saveState).
+  function sideCopy(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
   }
 
   /* ---------- QR code for the backup link ---------- */
@@ -927,7 +1055,7 @@
     renderedDay = dateStr(nowMs());
     var parts = [];
 
-    if (state.routine.enabled) {
+    if (routineOn()) {
       var sessions = routineSessions();
       var idx = state.routine.sessionIndex % sessions.length;
       var sess = sessions[idx];
@@ -963,7 +1091,7 @@
     // Outside the routine branch on purpose: the library is a reference you may
     // want whether or not you've set a routine up.
     parts.push('<div class="today-links">' +
-      (state.routine.enabled ? '<button class="tdlink" id="weekBtn">&#128198; This week</button>' : "") +
+      (routineOn() ? '<button class="tdlink" id="weekBtn">&#128198; This week</button>' : "") +
       '<button class="tdlink" id="libraryBtn">&#128218; Exercise library</button></div>');
 
     var nudge = smartNudge();
@@ -976,8 +1104,7 @@
     var ns = $("#nextSessionBtn", host);
     if (ns) ns.addEventListener("click", function () {
       var sessions2 = routineSessions();
-      state.routine.sessionIndex = (state.routine.sessionIndex + 1) % sessions2.length;
-      touchPrefs();
+      setPref("sessionIndex", (state.routine.sessionIndex + 1) % sessions2.length);
       saveState();
       renderToday();
       toast("Next session ready");
@@ -1059,6 +1186,7 @@
     var e = null;
     state.log.forEach(function (x) { if (x.id === id) e = x; });
     if (!e) return;
+    if (e.kind) { toast("Editing this entry needs a newer version of the app"); return; }
     var ai = areaIndexById(e.areaId);
     logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id, variant: e.variant || "" };
     pushView({ t: "log", a: ai, s: e.step - 1 });
@@ -1086,18 +1214,18 @@
     if (logDraft.editId) {
       var target = null;
       state.log.forEach(function (x) { if (x.id === logDraft.editId) target = x; });
-      var savedOk = true;
+      var savedOk = false;
       if (target) {
         target.sets = sets;
         target.note = logDraft.note;
         target.variant = logDraft.variant || "";
-        target.mts = nowMs();
+        target.mts = MODEL.stamp(target.mts);
         savedOk = saveState();
       }
       logDraft = { key: "", sets: [], note: "", editId: null, variant: "" };
       refresh();
       goBack();
-      toast(savedOk ? "Session updated ✓" : "Updated in this tab only — storage is full or blocked");
+      toast(!target ? "Not saved — that session was deleted meanwhile" : (savedOk ? "Session updated ✓" : notSavedMsg()));
       return;
     }
 
@@ -1129,7 +1257,7 @@
     refresh();
     goBack(); // back to the step detail, which now reflects any new standard
     // Don't claim success if the write never landed.
-    toast(storageOk ? msg : "Saved in this tab only — storage is full or blocked");
+    toast(storageOk && !readOnly ? msg : notSavedMsg());
   }
 
   function goBack() {
@@ -1476,7 +1604,7 @@
   /* ---------- The week, and where each area is heading ---------- */
 
   function weekPaneHTML() {
-    if (!state.routine.enabled) {
+    if (!routineOn()) {
       return sheetHead({ title: "&#128198; This week", sub: "", back: true, backLabel: "Home" }) +
         '<div class="sheet-body"><p class="empty">No routine set up yet.<br>Choose 2, 3 or 6 days a week in Settings and your plan appears here.</p></div>';
     }
@@ -1545,6 +1673,46 @@
       "</div>";
   }
 
+  /* ---------- History rows (every kind of log entry) ---------- */
+
+  function fmtKg(x) { return String(Math.round(x * 100) / 100); }
+
+  // One row in History or a day's list. Calisthenics sessions open the log
+  // form; gym, quick-log and weigh-in entries (from newer versions of the
+  // app) are shown and can be deleted, but not edited here.
+  function entryRowHTML(e) {
+    var color, name, detail;
+    if (!e.kind) {
+      var a = AREAS[areaIndexById(e.areaId)];
+      var step = a.steps[e.step - 1];
+      color = areaColorVar(a);
+      name = a.icon + " " + esc(step.name);
+      detail = esc(setsSummary(e, step));
+    } else if (e.kind === "gym") {
+      color = "var(--axis)";
+      name = "&#127947;&#65039; " + esc(e.exId);
+      detail = esc(e.sets.map(function (r, i) { return r + (e.kg[i] ? " × " + fmtKg(e.kg[i]) + " kg" : ""); }).join(", "));
+    } else if (e.kind === "quick") {
+      color = "var(--axis)";
+      name = "&#9889; Quick log";
+      detail = esc(Object.keys(e.groups).map(function (g) { return g + " " + e.groups[g]; }).join(" · ") + " sets");
+    } else if (e.kind === "body") {
+      color = "var(--axis)";
+      name = "&#9878;&#65039; Weigh-in";
+      detail = esc(fmtKg(e.kg) + " kg" + (e.waist ? " · waist " + fmtKg(e.waist) + " cm" : ""));
+    } else {
+      return "";
+    }
+    return '<div class="hitem" style="--area:' + color + '">' +
+      // No aria-label here: it would mask the exercise/sets text inside,
+      // which is exactly what a screen-reader user needs to hear.
+      '<button class="hopen" data-id="' + esc(e.id) + '">' +
+      '<span class="hswatch"></span>' +
+      '<span class="hinfo"><span class="hname">' + name + "</span>" +
+      '<span class="hsets">' + detail + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
+      '<button class="hdel" data-id="' + esc(e.id) + '" aria-label="Delete this entry">&#128465;</button></div>';
+  }
+
   /* ---------- History pane ---------- */
 
   function historyPaneHTML() {
@@ -1562,18 +1730,7 @@
         groups[groups.length - 1].items.push(e);
       });
       body = groups.map(function (g) {
-        var rows = g.items.map(function (e) {
-          var a = AREAS[areaIndexById(e.areaId)];
-          var step = a.steps[e.step - 1];
-          return '<div class="hitem" style="--area:' + areaColorVar(a) + '">' +
-            // No aria-label here: it would mask the exercise/sets text inside,
-            // which is exactly what a screen-reader user needs to hear.
-            '<button class="hopen" data-id="' + esc(e.id) + '">' +
-            '<span class="hswatch"></span>' +
-            '<span class="hinfo"><span class="hname">' + a.icon + " " + esc(step.name) + "</span>" +
-            '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
-            '<button class="hdel" data-id="' + esc(e.id) + '" aria-label="Delete this entry">&#128465;</button></div>';
-        }).join("");
+        var rows = g.items.map(entryRowHTML).join("");
         return '<div class="hgroup"><div class="hdate">' + esc(prettyDate(g.ts)) + "</div>" + rows + "</div>";
       }).join("");
     }
@@ -1595,16 +1752,7 @@
     } else {
       // Same row markup as the history pane, so a day's sessions are editable and
       // deletable in place.
-      body = sessions.map(function (e) {
-        var a = AREAS[areaIndexById(e.areaId)];
-        var step = a.steps[e.step - 1];
-        return '<div class="hitem" style="--area:' + areaColorVar(a) + '">' +
-          '<button class="hopen" data-id="' + esc(e.id) + '">' +
-          '<span class="hswatch"></span>' +
-          '<span class="hinfo"><span class="hname">' + a.icon + " " + esc(step.name) + "</span>" +
-          '<span class="hsets">' + esc(setsSummary(e, step)) + (e.note ? " &middot; " + esc(e.note) : "") + "</span></span></button>" +
-          '<button class="hdel" data-id="' + esc(e.id) + '" aria-label="Delete this entry">&#128465;</button></div>';
-      }).join("");
+      body = sessions.map(entryRowHTML).join("");
     }
     return sheetHead({
       title: "&#128197; " + esc(prettyDate(ts)),
@@ -1718,7 +1866,8 @@
   /* ---------- Settings pane ---------- */
 
   function routinePreviewHTML() {
-    var sessions = ROUTINE_PRESETS[state.routine.daysPerWeek] || ROUTINE_PRESETS[3];
+    var sessions = routineSessions();
+    if (!sessions) return "";
     return sessions.map(function (sess, i) {
       return '<div class="rp-row"><span class="rp-day">Day ' + (i + 1) + "</span><span class=\"rp-moves\">" +
         sess.map(function (id) { var a = AREAS[areaIndexById(id)]; return a.icon + " " + esc(shortAreaName(a)); }).join(", ") +
@@ -1753,24 +1902,54 @@
         '<p class="hint">One-off setup: make your own free database — four steps, under <strong>Cloud sync setup</strong> in the README — then paste the address from its <em>Data</em> tab above.</p>' +
         '<div class="copyrow"><input type="text" id="pairCode" placeholder="&#8230;or paste a sync link" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="pairBtn">Connect</button></div>';
     }
+    // An older copy of the app is still writing the old-format record after
+    // this device moved on: its sessions still arrive here, but it can't see
+    // anything new, so it should be updated.
+    // Shown only while that is recent: once the other copy has updated it
+    // stops writing the old record, and the hint would otherwise stay forever.
+    var olderCopy = syncCfg.cutAt && syncCfg.legacyAt > syncCfg.cutAt && nowMs() - syncCfg.legacyAt < 3 * 86400000
+      ? '<p class="hint">An older copy of the app, on another device or tab, last synced on ' + esc(dateStr(syncCfg.legacyAt)) +
+        ". Its sessions still arrive here, but it can't see newer data: open it and reload it so it updates.</p>"
+      : "";
+    var blocked = syncErrKind === "blocked"
+      ? '<p class="warn">The copy in the cloud couldn\u2019t be read, so this device stopped syncing rather than overwrite it. ' +
+        "If this device has all your training, you can replace the cloud copy with it.</p>" +
+        '<div class="btnrow"><button class="btn danger" id="replaceCloudBtn">Replace cloud copy with this device</button></div>'
+      : "";
     return head +
       '<p id="syncStatus">' + esc(syncStatusText()) + "</p>" +
+      blocked +
       '<div class="btnrow"><button class="btn" id="syncNowBtn">&#8635; Sync now</button>' +
       '<button class="btn" id="pairQrBtn">&#9636; Connect another device</button></div>' +
       '<div id="pairbox" class="qrbox"></div>' +
-      '<p class="hint">Happens by itself when you open the app and after you log a session.</p>';
+      '<p class="hint">Happens by itself when you open the app and after you log a session.</p>' +
+      olderCopy;
+  }
+
+  // Copies the app keeps by itself: the data as it was before the v5 update,
+  // and any stored data that couldn't be read. Shown only when they exist.
+  function safetyCopiesHTML() {
+    var pre = sideCopy(PRE_UPDATE_KEY), bad = sideCopy(RECOVER_KEY);
+    if (!pre && !bad) return "";
+    return "<h5>Safety copies</h5>" +
+      "<p>Kept automatically, in case something ever needs undoing. Restore one with &#8220;Restore from file&#8221;.</p>" +
+      '<div class="btnrow">' +
+      (pre ? '<button class="btn" id="preCopyBtn">&#11015; Data before the last update</button>' : "") +
+      (bad ? '<button class="btn" id="recoverCopyBtn">&#11015; Data that couldn&#8217;t be read</button>' : "") +
+      "</div>";
   }
 
   function settingsPaneHTML() {
     var url = shareURL();
-    var routineChips = '<button class="chip' + (!state.routine.enabled ? " sel" : "") + '" data-routine="off">Off</button>' +
+    var routineChips = '<button class="chip' + (!routineOn() ? " sel" : "") + '" data-routine="off">Off</button>' +
       [2, 3, 6].map(function (d) {
-        return '<button class="chip' + ((state.routine.enabled && state.routine.daysPerWeek === d) ? " sel" : "") + '" data-routine="' + d + '">' + d + " days/week</button>";
+        return '<button class="chip' + (state.routine.split === "bb" + d ? " sel" : "") + '" data-routine="' + d + '">' + d + " days/week</button>";
       }).join("");
     // Anything wrong with saving goes first — it's the one thing here that
     // can't wait to be scrolled to.
     var warnings =
       (storageOk ? "" : '<p class="warn"><strong>Saving isn&#8217;t working</strong> in this browser (storage blocked, or full). Changes will be lost when you close the tab — download a backup file now.</p>') +
+      (readOnly ? '<p class="warn"><strong>Nothing is being saved on this device</strong>: it holds data from a newer version of the app. Reload to update — until then, changes made here are lost when you close it.</p>' : "") +
       (loadFailed ? '<p class="warn"><strong>The data on this device couldn&#8217;t be read</strong>, so the app started empty. Nothing has been overwritten yet — restore a backup file before logging anything new.</p>' : "");
 
     return sheetHead({ title: "&#9881;&#65039; Settings", sub: "", back: false }) +
@@ -1779,7 +1958,7 @@
       "<h4>Weekly routine</h4>" +
       "<p>Pick how many days a week you train; the app spreads the six movements across them and shows today&#8217;s session on the home screen.</p>" +
       '<div class="chips">' + routineChips + "</div>" +
-      '<div class="routine-preview">' + routinePreviewHTML() + "</div>" +
+      (routineOn() ? '<div class="routine-preview">' + routinePreviewHTML() + "</div>" : "") +
       syncSectionHTML() +
       ghostSectionHTML() +
       "<h4>Backup</h4>" +
@@ -1797,6 +1976,7 @@
       '<div class="btnrow"><button class="btn" id="qrBtn">&#9636; Show QR code</button></div>' +
       '<div id="qrbox" class="qrbox"></div>' +
       '<div class="copyrow"><input type="text" id="importCode" placeholder="Paste a progress link&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="importBtn">Import</button></div>' +
+      safetyCopiesHTML() +
       "<h5>Start over</h5>" +
       '<div class="btnrow">' +
       (syncCfg ? '<button class="btn danger" id="syncOffBtn">Turn off sync here</button>' : "") +
@@ -1828,6 +2008,9 @@
 
     var nowBtn = $("#syncNowBtn", sheet);
     if (nowBtn) nowBtn.addEventListener("click", function () { syncNow(true); });
+
+    var replaceBtn = $("#replaceCloudBtn", sheet);
+    if (replaceBtn) replaceBtn.addEventListener("click", replaceCloudCopy);
 
     var qrBtn = $("#pairQrBtn", sheet);
     if (qrBtn) qrBtn.addEventListener("click", function () {
@@ -1998,8 +2181,7 @@
       var nextB = $("#sessionNext", sheet);
       if (nextB) nextB.addEventListener("click", function () {
         var sessions3 = routineSessions();
-        state.routine.sessionIndex = (state.routine.sessionIndex + 1) % sessions3.length;
-        touchPrefs();
+        setPref("sessionIndex", (state.routine.sessionIndex + 1) % sessions3.length);
         saveState();
         sessionCursor = -1;
         renderToday();
@@ -2046,8 +2228,7 @@
       var ghostReset = $("#ghostResetBtn", sheet);
       if (ghostReset) ghostReset.addEventListener("click", function () {
         // Freeze today's shape as the baseline.
-        state.settings.ghostBase = { d: dateStr(nowMs()), v: currentRadarVals() };
-        touchPrefs();
+        setPref("ghostBase", { d: dateStr(nowMs()), v: currentRadarVals() });
         saveState();
         ghostOn = false;
         refresh();
@@ -2057,8 +2238,7 @@
 
       var ghostAll = $("#ghostAllBtn", sheet);
       if (ghostAll) ghostAll.addEventListener("click", function () {
-        state.settings.ghostBase = null;
-        touchPrefs();
+        setPref("ghostBase", null);
         saveState();
         refresh();
         renderSheet();
@@ -2068,15 +2248,12 @@
       sheet.querySelectorAll("[data-routine]").forEach(function (b) {
         b.addEventListener("click", function () {
           var val = b.getAttribute("data-routine");
-          if (val === "off") { state.routine.enabled = false; }
-          else {
-            var days = Number(val);
-            // Only rewind the rotation when the split actually changes.
-            if (!state.routine.enabled || state.routine.daysPerWeek !== days) state.routine.sessionIndex = 0;
-            state.routine.enabled = true;
-            state.routine.daysPerWeek = days;
+          var split = val === "off" ? "off" : "bb" + Number(val);
+          // Only rewind the rotation when the split actually changes.
+          if (split !== state.routine.split) {
+            setPref("split", split);
+            if (split !== "off") setPref("sessionIndex", 0);
           }
-          touchPrefs();
           saveState();
           renderToday();
           renderSheet();
@@ -2112,6 +2289,14 @@
         }
       });
       $("#downloadBtn", sheet).addEventListener("click", downloadBackup);
+      var preCopy = $("#preCopyBtn", sheet);
+      if (preCopy) preCopy.addEventListener("click", function () {
+        saveTextFile(sideCopy(PRE_UPDATE_KEY) || "", "bigsix-before-update-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
+      });
+      var recoverCopy = $("#recoverCopyBtn", sheet);
+      if (recoverCopy) recoverCopy.addEventListener("click", function () {
+        saveTextFile(sideCopy(RECOVER_KEY) || "", "bigsix-unreadable-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
+      });
       $("#restoreBtn", sheet).addEventListener("click", function () { $("#restoreFile", sheet).click(); });
       $("#restoreFile", sheet).addEventListener("change", function () {
         var f = this.files && this.files[0];
@@ -2121,24 +2306,31 @@
         reader.onload = function () {
           var parsed = null;
           try { parsed = JSON.parse(String(reader.result)); } catch (e) { parsed = null; }
+          input.value = "";
+          if (readOnly) { toast(notSavedMsg()); return; }
+          if (MODEL.isNewer(parsed)) { toast("That backup is from a newer version of the app — update this device first"); return; }
           var incoming = parsed ? sanitizeState(parsed) : null;
-          if (!incoming) { toast("That file isn't a valid backup"); input.value = ""; return; }
-          if (confirm("Restore this backup? It will replace ALL current progress and history on this device.")) {
-            applyFullState(incoming, "Backup restored ✓");
+          if (!incoming) { toast("That file isn't a valid backup"); return; }
+          // Merging is the safe default: nothing on this device is lost.
+          if (confirm("Merge this backup into this device?\n\nSessions from both are kept; where both have the same thing, the newer change wins.\n\nOK = merge · Cancel = other options")) {
+            applyFullState(sanitizeState(MODEL.merge(state, incoming)), "Backup merged ✓");
+            renderSheet();
+          } else if (confirm("Replace EVERYTHING on this device with the backup instead? Anything that isn't in the backup is removed from this device." + syncCaveat())) {
+            applyFullState(incoming, "Backup restored ✓", true);
             renderSheet();
           }
-          input.value = "";
         };
         reader.onerror = function () { toast("Couldn't read that file"); input.value = ""; };
         reader.readAsText(f);
       });
       $("#resetBtn", sheet).addEventListener("click", function () {
-        if (confirm("Reset ALL progress AND history on this device? This cannot be undone.")) {
+        if (readOnly) { toast(notSavedMsg()); return; }
+        if (confirm("Reset ALL progress AND history on this device? This cannot be undone." + syncCaveat())) {
           state = defaultState();
-          saveState();
+          var ok = saveReplacing();
           refresh();
           renderSheet();
-          toast("Everything reset");
+          toast(ok ? "Everything reset" : notSavedMsg());
         }
       });
     }
@@ -2194,28 +2386,31 @@
   // Progress-only import (URL link / pasted code): merge the six area positions,
   // preserving any training history already on this device.
   function applyImport(incoming) {
+    if (readOnly) { toast(notSavedMsg()); return; }
     AREAS.forEach(function (a) {
-      if (incoming.areas[a.id]) {
-        state.areas[a.id] = incoming.areas[a.id];
-        touchArea(a.id);
+      var inc = incoming.areas[a.id];
+      if (inc) {
+        // Stamped after the position it replaces, like every other edit, so a
+        // device whose clock runs ahead can't make sync undo the import.
+        state.areas[a.id] = { step: inc.step, std: inc.std, mts: MODEL.stamp(state.areas[a.id].mts) };
       }
       // An imported position can already be a mastered area — record it so the
       // milestone timeline isn't silently missing it.
       checkMaster(a.id);
     });
-    saveState();
+    var ok = saveState();
     displayVals = AREAS.map(function (a) { return areaValue(a.id); });
     if (booted) { recordSnapshot(); paintRadar(); renderCards(); renderToday(); updateGhostControl(); }
-    toast("Progress imported ✓");
+    toast(ok ? "Progress imported ✓" : notSavedMsg());
   }
 
   // Full restore (backup file): replace everything, including history.
-  function applyFullState(incoming, msg) {
+  function applyFullState(incoming, msg, replaceAll) {
     state = incoming;
-    saveState();
+    var ok = replaceAll ? saveReplacing() : saveState();
     displayVals = AREAS.map(function (a) { return areaValue(a.id); });
     if (booted) { recordSnapshot(); paintRadar(); renderCards(); renderToday(); updateGhostControl(); }
-    toast(msg || "Restored ✓");
+    toast(ok ? (msg || "Restored ✓") : notSavedMsg());
   }
 
   function tryImportFromHash() {
@@ -2243,6 +2438,7 @@
   var syncBusy = false;      // a round is in flight
   var syncAgain = false;     // something changed while it was in flight
   var syncErr = "";
+  var syncErrKind = "";      // "newer" | "blocked" | "" — decides what Settings offers
   var syncTimer = null;
   var applyingSync = false;  // guards against a sync's own save re-triggering it
 
@@ -2262,7 +2458,7 @@
   }
 
   function syncNow(manual) {
-    if (!syncCfg) return;
+    if (!syncCfg || readOnly) return;
     // Never re-render the log form out from under someone mid-entry.
     if (!manual && logPaneOpen()) { syncAgain = true; return; }
     if (syncBusy) { syncAgain = true; return; }
@@ -2270,9 +2466,11 @@
     syncAgain = false;
     updateSyncUI();
 
-    syncRound(1).then(function (changed) {
+    // Wrapped so that any mistake inside a round becomes a reported failure,
+    // never a sync that is stuck "busy" for good.
+    Promise.resolve().then(function () { return syncRound(1); }).then(function (changed) {
       syncBusy = false;
-      syncErr = "";
+      syncErr = ""; syncErrKind = "";
       SYNC.markSynced(syncCfg, nowMs());
       if (changed) {
         refresh();
@@ -2284,37 +2482,66 @@
     }, function (err) {
       syncBusy = false;
       syncErr = (err && err.message) ? err.message : "Sync failed.";
+      syncErrKind = (err && err.kind) || "";
+      if (syncErrKind === "newer") showBanner("newer-remote");
       if (manual) toast(syncErr);
       updateSyncUI();
+      // The error panel in Settings changes with the kind of failure.
+      if (manual && uiStack.length && uiStack[uiStack.length - 1].t === "settings") renderSheet();
     });
   }
 
-  // One pull → merge → push round. Resolves to true when the merge actually
-  // changed anything locally. `triesLeft` covers the compare-and-set retry.
-  function syncRound(triesLeft) {
-    return SYNC.pull(syncCfg).then(function (res) {
-      // Anything off the network is untrusted input: it goes through exactly
-      // the same validation as a restored backup file before it is merged.
-      var remote = res.raw ? sanitizeState(res.raw) : null;
-      var changed = false;
+  function syncError(kind, message) {
+    var e = new Error(message);
+    e.kind = kind;
+    return e;
+  }
 
-      if (remote) {
-        var before = JSON.stringify(state);
-        var merged = sanitizeState(SYNC.merge(state, remote));
-        if (merged && JSON.stringify(merged) !== before) {
-          state = merged;
-          applyingSync = true;
-          saveState();
-          applyingSync = false;
-          displayVals = AREAS.map(function (a) { return areaValue(a.id); });
-          changed = true;
-        }
+  // The old-format record, only when an older device has written to it since
+  // its sessions were last merged in. Never fails the round: at worst the old
+  // record is simply skipped this time.
+  function legacyPull() {
+    return SYNC.legacyStamp(syncCfg).then(function (stamp) {
+      if (stamp === null || stamp === syncCfg.legacyAt) return null;
+      return SYNC.pull(syncCfg, true).then(function (res) {
+        res.stamp = stamp;
+        return res.status === "ok" ? res : null;
+      });
+    }).catch(function () { return null; });
+  }
+
+  /* One pull → merge → push round, on the data v5 record. The decision itself
+     is MODEL.reconcile (pure, tested in Node); this only does the I/O around
+     it. Resolves to true when anything changed locally. `triesLeft` covers
+     the compare-and-set retry. */
+  function syncRound(triesLeft) {
+    return Promise.all([SYNC.pull(syncCfg), legacyPull()]).then(function (res) {
+      var remote = res[0], legacy = res[1];
+      // Anything off the network is untrusted: reconcile runs it through the
+      // same validation as a restored backup file before merging.
+      var r = MODEL.reconcile(state, remote, legacy);
+      if (r.newer) {
+        throw syncError("newer", "The app was updated on another device — reload here to keep syncing.");
+      }
+      if (r.blocked) {
+        throw syncError("blocked", "The cloud copy couldn't be read, so nothing was synced and nothing was overwritten.");
       }
 
-      // Only spend a write when the cloud copy isn't already what we hold.
-      if (remote && JSON.stringify(remote) === JSON.stringify(state)) return changed;
+      var changed = false, savedOk = true;
+      if (r.changed) {
+        state = r.state;
+        applyingSync = true;
+        savedOk = saveState();
+        applyingSync = false;
+        displayVals = AREAS.map(function (a) { return areaValue(a.id); });
+        changed = true;
+      }
+      // Only remember the old record as merged once its sessions are stored.
+      if (legacy && savedOk) SYNC.updateConfig(syncCfg, { legacyAt: legacy.stamp });
 
-      return SYNC.push(syncCfg, state, res.etag).then(function () {
+      if (!r.push) return changed;
+      return SYNC.push(syncCfg, state, remote.etag).then(function () {
+        if (!syncCfg.cutAt) SYNC.updateConfig(syncCfg, { cutAt: nowMs() });
         return changed;
       }, function (err) {
         // Another device wrote between our read and our write — take its
@@ -2325,8 +2552,29 @@
     });
   }
 
+  // The escape hatch for a cloud copy this version can't read: overwrite it
+  // with this device's data, after asking. Unconditional write, on purpose.
+  function replaceCloudCopy() {
+    if (!syncCfg || readOnly) return;
+    if (!confirm("Replace the cloud copy with this device's data? Whatever is stored in the cloud now is overwritten. Only do this if you're sure this device has everything.")) return;
+    syncBusy = true; updateSyncUI();
+    SYNC.push(syncCfg, state, null).then(function () {
+      syncBusy = false; syncErr = ""; syncErrKind = "";
+      SYNC.markSynced(syncCfg, nowMs());
+      if (!syncCfg.cutAt) SYNC.updateConfig(syncCfg, { cutAt: nowMs() });
+      toast("Cloud copy replaced ✓");
+      updateSyncUI();
+      if (uiStack.length) renderSheet();
+    }, function (err) {
+      syncBusy = false;
+      toast((err && err.message) || "Couldn't replace the cloud copy");
+      updateSyncUI();
+    });
+  }
+
   function syncStatusText() {
     if (!syncCfg) return "";
+    if (readOnly) return "Paused: this device has data from a newer version of the app. Reload to update.";
     if (syncBusy) return "Syncing…";
     if (syncErr) return "Last attempt failed: " + syncErr;
     if (!syncCfg.lastSync) return "Set up — not synced yet.";
@@ -2412,7 +2660,48 @@
   renderToday();
   // Capture today's shape for the ghost radar — but never auto-write over
   // stored data we failed to read, so a recoverable backup isn't destroyed.
-  if (!loadFailed) recordSnapshot();
+  if (!loadFailed && !readOnly) recordSnapshot();
+  if (readOnly) showBanner("newer");
+
+  // Another tab (or window) of the app saved. Take its changes in rather
+  // than overwrite them with this tab's older copy on the next save.
+  window.addEventListener("storage", function (e) {
+    if (e.key === STORE_KEY) {
+      if (!e.newValue || readOnly) return;
+      var raw;
+      try { raw = JSON.parse(e.newValue); } catch (err) { return; }
+      // The other tab replaced everything on purpose: take its data as it is.
+      var replacedAt = 0;
+      try { replacedAt = Number(localStorage.getItem(REPLACE_KEY)) || 0; } catch (err) { /* ignore */ }
+      if (replacedAt > seenReplaceAt && !MODEL.isNewer(raw)) {
+        seenReplaceAt = replacedAt;
+        var adopted = sanitizeState(raw);
+        if (adopted) {
+          state = adopted;
+          displayVals = AREAS.map(function (a) { return areaValue(a.id); });
+          refresh();
+          if (uiStack.length && !logPaneOpen()) renderSheet();
+        }
+        return;
+      }
+      var r = MODEL.absorb(state, raw);
+      if (r.readOnly) { readOnly = true; showBanner("newer"); updateSyncUI(); return; }
+      if (r.changed) {
+        state = r.state;
+        displayVals = AREAS.map(function (a) { return areaValue(a.id); });
+        refresh();
+        if (uiStack.length && !logPaneOpen()) renderSheet();
+      }
+      // Only when this tab knows something the other one doesn't.
+      if (r.save) saveState();
+    } else if (e.key === "bigsix.sync" && typeof SYNC !== "undefined") {
+      // Sync switched off, on, or re-paired in another tab.
+      syncCfg = SYNC.getConfig();
+      syncErr = ""; syncErrKind = "";
+      updateSyncUI();
+      if (uiStack.length && uiStack[uiStack.length - 1].t === "settings") renderSheet();
+    }
+  });
   updateGhostControl();
   updateSyncUI();
   booted = true;

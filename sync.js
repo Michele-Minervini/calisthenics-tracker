@@ -9,10 +9,14 @@
    - Your whole state is a small JSON blob (tens of KB), so there
      is no clever per-record protocol: the device pushes the whole
      thing and pulls the whole thing.
-   - It lives at  <database>/u/<code>.json  where <code> is a long
+   - It lives at  <database>/u/<code>m5.json  where <code> is a long
      random string generated once and carried to your other device
      by QR. Knowing the code is what grants access — that is the
      entire security model, so treat the code like a password.
+     (Data v5 moved to that record from <code>.json: devices still
+     running the older app keep writing the old record, which is now
+     only ever READ, so they can never strip newer data. See
+     app.js syncRound and MODEL.reconcile.)
    - localStorage stays the source of truth. Sync is a background
      extra: with no network, the app behaves exactly as before.
    - Two devices are reconciled by MODEL.merge() (model.js), never
@@ -29,7 +33,12 @@ var SYNC = (function () {
   // code must never travel inside a backup file or a shared progress link.
   var CONFIG_KEY = "bigsix.sync";
   var TIMEOUT_MS = 15000;
-  var BUILD = "bigsix-v16";
+  var BUILD = "bigsix-v17";
+
+  // The cloud record for data v5, next to the old one at plain <code>. The
+  // security rules accept any key of 20+ characters, so no rule change and
+  // no re-pairing is needed.
+  var RECORD_SUFFIX = "m5";
   var MAX_BLOB = 900000; // keep well under the 1 MB the database rules allow
 
   // A pairing link may be scanned from a QR code, i.e. it is untrusted input.
@@ -47,7 +56,12 @@ var SYNC = (function () {
       var c = JSON.parse(raw);
       var url = normalizeURL(c && c.url);
       if (!url || !validCode(c && c.code)) return null;
-      return { url: url, code: c.code, lastSync: Number(c.lastSync) || 0 };
+      return {
+        url: url, code: c.code, lastSync: Number(c.lastSync) || 0,
+        // When this device first wrote the v5 record, and the old record's
+        // updatedAt as of the last time its sessions were merged in.
+        cutAt: Number(c.cutAt) || 0, legacyAt: Number(c.legacyAt) || 0
+      };
     } catch (e) { return null; }
   }
 
@@ -60,9 +74,19 @@ var SYNC = (function () {
     try { localStorage.removeItem(CONFIG_KEY); } catch (e) { /* nothing to do */ }
   }
 
+  // Updates fields of the stored config — re-reading it first, so a change
+  // made meanwhile in another tab (sync turned off, a new pairing) is never
+  // undone by this tab's stale copy. Returns false when the stored config no
+  // longer matches this one.
+  function updateConfig(cfg, patch) {
+    var cur = getConfig();
+    if (!cur || cur.url !== cfg.url || cur.code !== cfg.code) return false;
+    Object.keys(patch).forEach(function (k) { cur[k] = patch[k]; cfg[k] = patch[k]; });
+    return setConfig(cur);
+  }
+
   function markSynced(cfg, when) {
-    cfg.lastSync = when;
-    setConfig(cfg);
+    return updateConfig(cfg, { lastSync: when });
   }
 
   /* ---------- Codes and URLs ---------- */
@@ -100,8 +124,8 @@ var SYNC = (function () {
     return "https://" + u.hostname;
   }
 
-  function recordURL(cfg) {
-    return cfg.url + "/u/" + cfg.code + ".json";
+  function recordURL(cfg, legacy) {
+    return cfg.url + "/u/" + cfg.code + (legacy ? "" : RECORD_SUFFIX) + ".json";
   }
 
   /* ---------- Pairing (carry the config to the second device) ---------- */
@@ -157,10 +181,15 @@ var SYNC = (function () {
     return new Error("The database replied " + res.status + ".");
   }
 
-  // Resolves to { raw, etag } where raw is the stored state object, or null
-  // when this code has never been written to (a fresh pairing).
-  function pull(cfg) {
-    return withTimeout(recordURL(cfg), {
+  /* Resolves to { status, raw, etag, updatedAt }:
+       "absent"      nothing stored yet (a fresh pairing, or before cutover)
+       "ok"          raw is the stored state object
+       "unreadable"  something is stored but it isn't a state we can read —
+                     the caller must NOT overwrite it (it may be data from a
+                     newer app, a hand edit, or a partial write).
+     legacy: read the old-format record instead of the v5 one. */
+  function pull(cfg, legacy) {
+    return withTimeout(recordURL(cfg, legacy), {
       method: "GET",
       headers: { "X-Firebase-ETag": "true" },
       cache: "no-store"
@@ -169,15 +198,29 @@ var SYNC = (function () {
       // The ETag is only readable if Firebase exposes it through CORS. When it
       // isn't, push() simply falls back to an unconditional write.
       var etag = res.headers.get("ETag");
-      return res.json().then(function (body) {
-        if (!body || typeof body !== "object" || typeof body.blob !== "string") {
-          return { raw: null, etag: etag };
-        }
+      return res.text().then(function (text) {
+        var body;
+        try { body = JSON.parse(text); } catch (e) { return { status: "unreadable", raw: null, etag: etag, updatedAt: 0 }; }
+        if (body === null) return { status: "absent", raw: null, etag: etag, updatedAt: 0 };
         var parsed = null;
-        try { parsed = JSON.parse(body.blob); } catch (e) { parsed = null; }
-        return { raw: parsed, etag: etag };
+        if (body && typeof body === "object" && typeof body.blob === "string") {
+          try { parsed = JSON.parse(body.blob); } catch (e) { parsed = null; }
+        }
+        if (!parsed || typeof parsed !== "object") return { status: "unreadable", raw: null, etag: etag, updatedAt: 0 };
+        return { status: "ok", raw: parsed, etag: etag, updatedAt: Number(body.updatedAt) || 0 };
       });
     });
+  }
+
+  // The old record's updatedAt alone — a few bytes — so the whole old record
+  // is only downloaded when an older device has actually written to it.
+  // Resolves to a number, or null when there is no old record.
+  function legacyStamp(cfg) {
+    return withTimeout(cfg.url + "/u/" + cfg.code + "/updatedAt.json", { method: "GET", cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw httpError(res);
+        return res.json().then(function (v) { var n = Number(v); return (v === null || !isFinite(n)) ? null : n; });
+      });
   }
 
   // Writes the state. When an etag is supplied the write is conditional, so a
@@ -210,6 +253,9 @@ var SYNC = (function () {
     setConfig: setConfig,
     clearConfig: clearConfig,
     markSynced: markSynced,
+    updateConfig: updateConfig,
+    legacyStamp: legacyStamp,
+    RECORD_SUFFIX: RECORD_SUFFIX,
     makeCode: makeCode,
     normalizeURL: normalizeURL,
     pairingHash: pairingHash,

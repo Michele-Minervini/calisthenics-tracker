@@ -30,16 +30,28 @@ function sanitizeFingerprints(impl) {
   return inUTC(() => {
     const gen = makeGen(SEED);
     const out = [];
-    for (let i = 0; i < SANITIZE_CASES; i++) out.push(fingerprint(impl.sanitizeState(clone(gen.state()) || null)));
+    for (let i = 0; i < SANITIZE_CASES; i++) out.push(fingerprint(impl.sanitizeState(clone(input(gen, i)) || null)));
     return out;
   });
 }
 
+// Half the inputs in the old stored shapes (as a device updating from them
+// holds), half in the data v5 shape with every entry kind.
+function input(gen, i) { return i % 2 ? gen.state5() : gen.state(); }
+
 function mergePairs() {
   const gen = makeGen(SEED + 1);
   const pairs = [];
-  for (let i = 0; i < MERGE_CASES; i++) pairs.push([gen.state(), gen.state()]);
+  for (let i = 0; i < MERGE_CASES; i++) pairs.push([input(gen, i), input(gen, i + 1)]);
   return pairs;
+}
+
+// The i-th sanitize input, for pointing at a failing case.
+function sanitizeInput(i) {
+  const gen = makeGen(SEED);
+  let x;
+  for (let k = 0; k <= i; k++) x = input(gen, k);
+  return x;
 }
 
 // Both orders are recorded: merge is meant to be symmetric, and where it
@@ -52,4 +64,4 @@ function mergeFingerprints(impl) {
   }));
 }
 
-module.exports = { NOW, SEED, SANITIZE_CASES, MERGE_CASES, clone, inUTC, sanitizeFingerprints, mergeFingerprints, mergePairs };
+module.exports = { NOW, SEED, SANITIZE_CASES, MERGE_CASES, clone, inUTC, sanitizeFingerprints, mergeFingerprints, mergePairs, sanitizeInput };

@@ -76,7 +76,77 @@ function makeGen(seed) {
     return s;
   }
 
-  return { rnd, entry, state };
+  /* ---- data v5 shapes: every entry kind, per-field stamps, exercises ---- */
+
+  const GROUPS = ["chest", "back", "shoulders", "arms", "abs", "legs"];
+  const PREFS = ["restSeconds", "restGym", "autoRest", "ghostBase", "vol", "keepAwake", "split", "mode", "sessionIndex", "override"];
+  // Small pools on purpose, so ids and stamps collide and ties get exercised.
+  const smallTs = () => pick([0, 1, T0, T0 + 1, T0 + 2]);
+  const logId = () => pick(["g1", "g2", "q1", "b1", "a1", "a2", "s1"]);
+
+  function entry5() {
+    const k = rnd();
+    if (k < 0.3) { const e = entry(); if (e && typeof e === "object" && !Array.isArray(e)) e.id = logId(); return e; }
+    const e = { id: logId(), ts: pick([T0, T0 + 1, T0 + 86400000]), mts: smallTs() };
+    maybe(0.3, () => { e.note = pick(["", "heavy", "x".repeat(300)]); });
+    if (k < 0.6) {
+      e.kind = "gym";
+      e.exId = pick(["bench_bb", "row_db", "x_1", "x_2", "bad id!", 3]);
+      e.sets = rnd() < 0.05 ? "no" : Array.from({ length: Math.floor(rnd() * 5) }, () => pick([8, 10, 12, 0, -1, 7.6, "9", null, "x"]));
+      maybe(0.9, () => { e.kg = Array.from({ length: Math.floor(rnd() * 5) }, () => pick([60, 62.5, "62,5", " 7 ", 62.3, -5, 2000, "abc", null])); });
+    } else if (k < 0.8) {
+      e.kind = "quick";
+      e.groups = rnd() < 0.05 ? "no" : {};
+      if (typeof e.groups === "object") GROUPS.concat(["foo"]).forEach(g => maybe(0.35, () => { e.groups[g] = pick([6, 4, 0, 51, "3", 1]); }));
+    } else if (k < 0.95) {
+      e.kind = "body";
+      e.kg = pick([72.4, "72,4", 19, 301, "x", 80.06]);
+      maybe(0.5, () => { e.waist = pick([82, "84,5", 29, null, ""]); });
+    } else {
+      e.kind = pick(["bw", "run", 5]);
+    }
+    return e;
+  }
+
+  function exercise5() {
+    const r = { id: pick(["x_1", "x_2", "x_3", "bench_bb", "row_db", "bad id!"]), mts: smallTs() };
+    maybe(0.7, () => { r.name = pick(["Cable fly", "  Hack   squat ", "", "y".repeat(60), 7]); });
+    maybe(0.7, () => { r.group = pick(GROUPS.concat(["neck", ""])); });
+    maybe(0.5, () => { r.sec = pick([["arms"], ["arms", "arms", "chest"], "x", ["legs", "abs", "back", "arms"]]); });
+    maybe(0.5, () => { r.equip = pick(["barbell", "dumbbell", "cable", "Bad Equip", ""]); });
+    maybe(0.5, () => { r.inc = pick([2.5, "1,25", 0, 60, "x"]); });
+    maybe(0.5, () => { r.lo = pick([8, 6, 0, 13]); r.hi = pick([12, 10, 5, 700]); });
+    maybe(0.3, () => { r.del = pick([true, false, "yes"]); });
+    maybe(0.3, () => { r.timed = pick([true, false]); });
+    return r;
+  }
+
+  function state5() {
+    const s = state();
+    if (!s || typeof s !== "object" || Array.isArray(s) || !s.areas || typeof s.areas !== "object") return s;
+    s.v = pick([5, 5, 5, 4, 6, "6"]);
+    s.log = Array.from({ length: Math.floor(rnd() * 7) }, entry5);
+    s.settings = Object.assign({}, typeof s.settings === "object" ? s.settings : {}, {
+      restGym: pick([90, 120, 4, null]),
+      autoRest: pick([true, false, "yes"]),
+      vol: pick([[10, 20], [12, 24], [25, 10], [0, 5], "x"]),
+      keepAwake: pick([true, false, 1])
+    });
+    s.routine = {
+      split: pick(["off", "bb3", "bb6", "five", "Five!", ""]),
+      mode: pick(["bw", "gym", "GYM", 3]),
+      sessionIndex: pick([0, 1, 2, 60]),
+      override: pick([null, { d: "2026-09-27", day: 2 }, { d: "bad", day: 1 }, { d: "2026-09-27", day: 25 }])
+    };
+    s.pm = {};
+    PREFS.forEach(f => maybe(0.7, () => { s.pm[f] = smallTs(); }));
+    maybe(0.1, () => { s.pm = pick([[], "x", null]); });
+    s.exercises = Array.from({ length: Math.floor(rnd() * 4) }, exercise5);
+    s.deleted = Array.from({ length: Math.floor(rnd() * 3) }, () => ({ id: logId(), ts: smallTs() || T0 }));
+    return s;
+  }
+
+  return { rnd, entry, state, entry5, state5 };
 }
 
 // Short fingerprint of a value, for recording many outputs compactly.

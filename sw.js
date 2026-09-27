@@ -10,7 +10,7 @@
    updates the matching stamp in every script; tests/static-test.js checks
    they agree. */
 
-var VERSION = "bigsix-v16";
+var VERSION = "bigsix-v17";
 var ASSETS = [
   ".",
   "index.html",

@@ -9,6 +9,7 @@
      now   freeze the clock: `new Date()` and `Date.now()` return this instant,
            while `new Date(x)` still works normally.
      seed  make Math.random() deterministic (mulberry32).
+     globals  extra globals, e.g. { fetch: fakeFetch }.
 
    Values coming back from the context are built by that context's own
    Array/Object, so compare with same() (JSON) rather than instanceof or
@@ -38,9 +39,12 @@ function load(files, opts) {
     URL,
     setTimeout,
     clearTimeout,
+    AbortController,
     window: { crypto: webcrypto, AbortController },
     localStorage: memoryStorage()
   });
+  // Extra globals the page would have, e.g. a fake fetch for sync tests.
+  if (opts.globals) Object.keys(opts.globals).forEach(k => { ctx[k] = opts.globals[k]; });
   if (opts.now != null) {
     vm.runInContext(
       "(function (FIXED) {" +
@@ -69,7 +73,16 @@ function load(files, opts) {
   return { ctx, get: name => vm.runInContext(name, ctx) };
 }
 
-let passes = 0, fails = 0;
+let passes = 0, fails = 0, finished = false;
+
+// A test file whose async part never settles would otherwise just stop, with
+// exit code 0, and look like a pass.
+process.on("exit", () => {
+  if (!finished) {
+    console.log("  FAIL the test file stopped before it finished (a promise never settled?)");
+    process.exitCode = 1;
+  }
+});
 
 function check(name, cond, extra) {
   if (cond) { passes++; console.log("  ok   " + name); }
@@ -81,6 +94,7 @@ function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 function section(title) { console.log("\n" + title); }
 
 function done(file) {
+  finished = true;
   console.log("\n" + path.basename(file) + ": " + passes + " passed, " + fails + " failed");
   if (fails) process.exitCode = 1;
 }

@@ -1,6 +1,6 @@
 {
- "about": "Expected sanitizeState output for each input, generated from the pre-refactor code (Big Six Tracker v15) with the clock frozen at `now` and Math.random seeded with `seed`. tests/model-test.js asserts model.js still produces exactly this. If a change here is intended, it changes what every device stores: bump MODEL_VERSION in model.js and re-record with node tools/record-fixtures.js.",
- "modelVersion": 4,
+ "about": "Expected sanitizeState output for each input under data v5, recorded by tools/record-fixtures.js with the clock frozen at `now` and Math.random seeded with `seed`.",
+ "modelVersion": 5,
  "now": 1790503200000,
  "seed": 42,
  "cases": [
@@ -64,7 +64,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 4,
@@ -100,17 +100,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -162,7 +182,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 3,
@@ -213,17 +233,37 @@
     ],
     "settings": {
      "restSeconds": 120,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -235,7 +275,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -271,17 +311,37 @@
     "log": [],
     "settings": {
      "restSeconds": 5,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -293,7 +353,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -329,17 +389,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -351,7 +431,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -387,17 +467,37 @@
     "log": [],
     "settings": {
      "restSeconds": 3600,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -409,7 +509,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -445,17 +545,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -467,7 +587,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -503,17 +623,37 @@
     "log": [],
     "settings": {
      "restSeconds": 90,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -527,7 +667,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -563,17 +703,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": true,
-     "daysPerWeek": 6,
-     "sessionIndex": 4
+     "split": "bb6",
+     "mode": "bw",
+     "sessionIndex": 4,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 1,
+     "mode": 0,
+     "sessionIndex": 1,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -587,7 +747,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -623,17 +783,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": true,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "bb3",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 1,
+     "mode": 0,
+     "sessionIndex": 1,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -647,7 +827,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -683,17 +863,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 2,
-     "sessionIndex": 49
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 49,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 1,
+     "mode": 0,
+     "sessionIndex": 1,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -746,7 +946,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -796,17 +996,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -835,7 +1055,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -888,17 +1108,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -918,7 +1158,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -968,17 +1208,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1017,7 +1277,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1052,7 +1312,7 @@
     },
     "log": [
      {
-      "id": "smujndj40cvtb",
+      "id": "smujndj409lwi",
       "ts": 1782892800000,
       "date": "2026-07-01",
       "areaId": "pushup",
@@ -1066,7 +1326,7 @@
       "variant": ""
      },
      {
-      "id": "smujndj409lwi",
+      "id": "smujndj40cvtb",
       "ts": 1782892800000,
       "date": "2026-07-01",
       "areaId": "pushup",
@@ -1082,17 +1342,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1145,7 +1425,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1224,17 +1504,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1286,7 +1586,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1365,17 +1665,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1442,7 +1762,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1502,7 +1822,7 @@
       ],
       "note": "",
       "mts": 1782892800000,
-      "variant": ""
+      "variant": "Bogus"
      },
      {
       "id": "b3",
@@ -1535,17 +1855,37 @@
     ],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1570,7 +1910,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 2,
@@ -1606,17 +1946,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1638,7 +1998,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1674,6 +2034,8 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
+     "restGym": 120,
+     "autoRest": true,
      "ghostBase": {
       "d": "2026-08-01",
       "v": [
@@ -1684,17 +2046,35 @@
        1,
        0
       ]
-     }
+     },
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1716,7 +2096,7 @@
     }
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1752,6 +2132,8 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
+     "restGym": 120,
+     "autoRest": true,
      "ghostBase": {
       "d": "2026-08-01",
       "v": [
@@ -1762,17 +2144,35 @@
        5,
        6
       ]
-     }
+     },
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1819,7 +2219,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1855,6 +2255,8 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
+     "restGym": 120,
+     "autoRest": true,
      "ghostBase": {
       "d": "2026-07-26",
       "v": [
@@ -1865,12 +2267,30 @@
        2,
        2
       ]
-     }
+     },
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [
      {
@@ -1909,7 +2329,7 @@
     ],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -1934,7 +2354,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -1970,12 +2390,32 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 1,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 1,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [
      {
@@ -1992,7 +2432,7 @@
     ],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -2033,7 +2473,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -2069,12 +2509,32 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [
      {
@@ -2091,7 +2551,7 @@
     ],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -2137,7 +2597,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -2173,12 +2633,32 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [
@@ -2198,7 +2678,7 @@
      }
     ],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -2222,7 +2702,7 @@
     ]
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -2258,12 +2738,32 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
@@ -2277,7 +2777,7 @@
       "ts": 1790503200000
      }
     ],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
@@ -2287,7 +2787,7 @@
     "prefsMts": 1782892800000
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -2323,17 +2823,37 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 1782892800000
+    "exercises": []
    }
   },
   {
@@ -2343,7 +2863,7 @@
     "prefsMts": 0
    },
    "expected": {
-    "v": 4,
+    "v": 5,
     "areas": {
      "pushup": {
       "step": 1,
@@ -2379,21 +2899,41 @@
     "log": [],
     "settings": {
      "restSeconds": 180,
-     "ghostBase": null
+     "restGym": 120,
+     "autoRest": true,
+     "ghostBase": null,
+     "vol": [
+      10,
+      20
+     ],
+     "keepAwake": false
     },
     "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
+     "split": "off",
+     "mode": "bw",
+     "sessionIndex": 0,
+     "override": null
+    },
+    "pm": {
+     "restSeconds": 0,
+     "restGym": 0,
+     "autoRest": 0,
+     "ghostBase": 0,
+     "vol": 0,
+     "keepAwake": 0,
+     "split": 0,
+     "mode": 0,
+     "sessionIndex": 0,
+     "override": 0
     },
     "snapshots": [],
     "milestones": [],
     "deleted": [],
-    "prefsMts": 0
+    "exercises": []
    }
   },
   {
-   "name": "unknown top-level keys dropped",
+   "name": "data claiming a newer version (v: 9) is refused, not stripped",
    "input": {
     "areas": {},
     "gym": [
@@ -2403,55 +2943,7 @@
     "v": 9,
     "extra": true
    },
-   "expected": {
-    "v": 4,
-    "areas": {
-     "pushup": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     },
-     "pullup": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     },
-     "legraise": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     },
-     "squat": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     },
-     "bridge": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     },
-     "hspu": {
-      "step": 1,
-      "std": 0,
-      "mts": 0
-     }
-    },
-    "log": [],
-    "settings": {
-     "restSeconds": 180,
-     "ghostBase": null
-    },
-    "routine": {
-     "enabled": false,
-     "daysPerWeek": 3,
-     "sessionIndex": 0
-    },
-    "snapshots": [],
-    "milestones": [],
-    "deleted": [],
-    "prefsMts": 0
-   }
+   "expected": null
   }
  ]
 }

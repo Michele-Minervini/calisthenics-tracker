@@ -143,10 +143,21 @@ keep themselves up to date.
   read and write that one path — and nobody who doesn't. Guessing it is not
   realistic (24 random characters), but don't post the QR anywhere public. To
   revoke it, turn sync off on both devices and turn it back on: you get a new
-  code, and the old data can be deleted from the Firebase console.
+  code, and the old data can be deleted from the Firebase console. There are
+  two entries per code under `u`: `<code>m5` is the current one, and `<code>`
+  (without the suffix) holds the data from before the September 2026 update,
+  kept read-only while older copies of the app catch up.
 - **Your devices are never overwritten, they're merged.** Sessions logged on two
-  devices are combined, an edit beats an older copy, and a deleted session stays
-  deleted instead of coming back from the other device.
+  devices are combined, an edit beats an older copy, a deleted session stays
+  deleted instead of coming back from the other device, and each setting syncs
+  on its own (changing the rest timer on the phone won't undo a routine chosen
+  on the laptop). Removing things is the one exception: with sync on, "reset"
+  and "replace from backup" only clear this device, because the others still
+  have the sessions and merge them back.
+- **A device that falls behind stops instead of damaging anything.** If the
+  cloud holds data from a newer version of the app, an older copy pauses
+  syncing and asks to be reloaded rather than write over it; the same goes for
+  a cloud copy it can't read (Settings then offers to replace it).
 - **Offline is unchanged.** `localStorage` is still the real store. Without a
   network the app behaves exactly as before and catches up when it reconnects.
 - **It costs nothing to leave on.** A day of training is a handful of requests

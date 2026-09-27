@@ -6,7 +6,7 @@
    ============================================================ */
 
 /* Build stamp: app.js refuses to run on files from two different releases. */
-const DATA_BUILD = "bigsix-v16";
+const DATA_BUILD = "bigsix-v17";
 
 const AREAS = [
   {
