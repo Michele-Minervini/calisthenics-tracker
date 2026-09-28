@@ -11,33 +11,38 @@ abs and legs.
 
 ## What it does
 
-- **This week, by muscle group.** The home screen shows six bars — hard sets
-  this week (Monday to Sunday) for chest, back, shoulders, arms, abs and legs —
-  against a weekly target of 10–20 sets (20–40 for arms and legs, which are
-  several muscles each). Skill sessions count too: a set of push-ups is one set
-  for chest and half a set for arms and shoulders. The ⓘ explains the counting.
-- **Log a gym day.** "＋ Log gym day" records the working sets you did for each
-  muscle group (today, yesterday or any earlier day), with a note. Tap it in
-  History to change or delete it.
-- A six-axis radar ("star") chart, ten rings deep — one glance shows your
-  current step in every area.
-- Tap an area name (chart or card) for its ten-step ladder; tap a colored dot
-  on the chart to jump straight to that area's current exercise. Every step
-  shows short instructions, Beginner / Intermediate / Progression rep goals,
-  tips for when it's too hard, and a demo-video link.
-- **Log your workouts.** On any exercise, tap "Log a session", enter your sets
-  and reps (or hold time), and save. The app checks the result against the
-  goals and marks the standard you met automatically; when you hit the
-  Progression goal it offers to move you up a step.
+Four tabs along the bottom, with **＋ Log** in the middle of them:
+
+- **Today.** Today's session (from your weekly routine), one tip about the
+  muscle group that needs it most, and the week at a glance: which days you
+  trained (a dot per muscle group) and six bars of hard sets per group against
+  their weekly targets.
+- **Body.** This week's hard sets for chest, back, shoulders, arms, abs and legs
+  — Monday to Sunday, against a target of 10–20 sets (20–40 for arms and legs,
+  which are several muscles each; change it in Settings) — with where an even
+  pace would put you by today, how you compare with this point last week, and a
+  balance radar. Skill sessions count too: a set of push-ups is one set for
+  chest and half a set for arms and shoulders. Tap a group for what counted,
+  its last 8 weeks and the skills that train it. The ⓘ explains the counting.
+- **Skills.** The six-axis radar, ten rings deep — your current step in every
+  ladder — and a card per ladder with what's next. Tap an area (chart or card)
+  for its ten steps; tap a dot to jump straight to your current exercise. Every
+  step shows short instructions, Beginner / Intermediate / Progression rep
+  goals, tips for when it's too hard, and a demo-video link.
+- **History.** Workouts this week, your week streak (weeks in a row with 2 or
+  more workouts) and your total; a month calendar with a dot per muscle group
+  trained; and every workout by day (All / Gym / Bodyweight) with the steps you
+  reached. Tap an entry to change or delete it.
+- **＋ Log.** Today's session moves in one tap, any other skill, or a **quick
+  gym log**: the working sets you did per muscle group (today, yesterday or any
+  earlier day), with a note.
+- **Logging a skill session.** Enter your sets and reps (or hold time) and
+  save. The app checks the result against the goals and marks the standard you
+  met automatically; when you hit the Progression goal it offers to move you up
+  a step.
 - **Rest timer.** One-tap presets (1/2/3/5 min) start a floating countdown that
   keeps running while you browse other exercises and pings when it's done.
-- **Training history & progress.** The calendar button lists every session
-  (tap one to edit it); the chart button opens a Progress view with a
-  GitHub-style training heatmap, streak counters, and a milestone timeline.
-  Each exercise shows a top-set sparkline over time.
-- **Weekly routine + Today card.** Pick a 2/3/6-day split in Settings and the
-  home screen shows today's session (ticks off as you log), plus a smart nudge
-  when a movement is lagging.
+  Each exercise also shows a top-set sparkline over time.
 - **It tells you what to do.** Every movement comes with a prescription — the
   exercise, the sets and reps, and which standard you're chasing — worked out
   from where you are right now. Move up a step and the next screen already asks
@@ -50,8 +55,8 @@ abs and legs.
   logged, but they can't award a standard you didn't earn.
 - **Exercise library.** Every area's ten steps in one list, each with what it
   trains and the reps and sets for all three standards.
-- **Week plan.** The whole rotation at a glance, plus what each area needs next
-  and the rungs beyond it.
+- **Week plan** (the link on Today's session). The whole rotation at a
+  glance, plus what each area needs next and the rungs beyond it.
 - **Ghost radar.** Toggle "Show where I started" to see your past shape behind
   today's. Settings can re-zero that line to today — handy at the start of a new
   training block — without touching your sessions or your steps.
@@ -71,9 +76,10 @@ abs and legs.
 | `index.html` | The page skeleton |
 | `style.css` | All styling (light + dark theme) |
 | `data.js` | The content: 60 exercises with rep goals, 38 variations, warm-ups, and which muscle groups each one works |
-| `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
+| `app.js` | The logic: navigation, logging, stats, saving/loading — and what the radar shows |
 | `model.js` | The data rules: what a saved state looks like, how it's cleaned on load, how two devices merge |
 | `training.js` | The training rules: weeks, hard sets per muscle group, weekly targets |
+| `radar.js` | Draws the radar charts (the Skills ladders and the Body muscle groups) |
 | `qrcode.js` | Self-contained QR-code generator (no dependencies) |
 | `sync.js` | Optional cloud sync: talks to your database |
 | `tests/` | Automated checks — run with `sh tests/run.sh` (see below) |
@@ -195,7 +201,7 @@ Every release gets a new build number: one higher than the current one (the
 forget). Four steps:
 
 ```bash
-sh tools/set-build.sh milo-v19
+sh tools/set-build.sh milo-v20
 ```
 
 ```bash

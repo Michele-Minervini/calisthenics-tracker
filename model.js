@@ -33,7 +33,7 @@
 var MODEL = (function () {
   "use strict";
 
-  var BUILD = "milo-v18";
+  var BUILD = "milo-v19";
 
   // The shape of the stored data. Any change to what the sanitizers output is a
   // change to what every device keeps: bump this, and see ROADMAP.md.

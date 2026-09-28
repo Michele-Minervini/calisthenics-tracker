@@ -114,6 +114,9 @@ function page(db) {
     check("reading gives up with a clear message", /took too long/.test(await msg(SYNC.pull(cfg()))));
     check("so does the old record's timestamp", /took too long/.test(await msg(SYNC.legacyStamp(cfg()))));
     check("so does writing", /took too long/.test(await msg(SYNC.push(cfg(), { v: 5, areas: {} }, null))));
+    let kind = "";
+    try { await SYNC.pull(cfg()); } catch (e) { kind = e.kind; }
+    check("…and says it's a connection problem (offline), not a fault", kind === "offline");
   }
 
   section("config can't be clobbered by a stale copy");

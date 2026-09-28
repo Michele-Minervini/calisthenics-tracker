@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="milo-v18">
+<html lang="en" data-build="milo-v19">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -17,42 +17,72 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="wrap">
-    <header class="app">
+  <div class="wrap shell">
+    <header class="app shellhead">
       <div class="title">
-        <h1>Milo</h1>
-        <p>Carry the calf every day</p>
+        <p class="brand">Milo<span class="brand-tab" id="brandTab"></span></p>
+        <h1 id="tabTitle" tabindex="-1">Milo</h1>
       </div>
       <div class="header-actions">
-        <button class="iconbtn" id="statsBtn" aria-label="Progress and stats" title="Progress">&#128202;</button>
-        <button class="iconbtn" id="historyBtn" aria-label="Training history" title="Training history">&#128197;</button>
-        <button class="iconbtn" id="settingsBtn" aria-label="Settings and backup" title="Settings &amp; backup">&#9881;&#65039;</button>
+        <button class="iconbtn gear" id="settingsBtn" aria-label="Settings" title="Settings">&#9881;&#65039;<span class="syncdot none" id="syncDot" aria-hidden="true"></span></button>
       </div>
     </header>
 
     <div id="banner" class="banner" role="status" hidden></div>
 
-    <section id="today" class="today" aria-label="Today's plan"></section>
+    <section class="tabpane" id="pane-today" aria-labelledby="tabTitle">
+      <div class="stack" id="today"></div>
+    </section>
 
-    <main class="layout">
-      <section class="radar-panel" aria-label="Progress radar">
-        <svg id="radar" viewBox="0 0 420 400" role="group" aria-label="Radar chart of your current step in each of the six movement areas"></svg>
-        <div class="radar-ctrl"><button id="ghostToggle" class="ghostbtn" type="button" aria-pressed="false" hidden>Show where I started</button></div>
-        <p class="radar-hint" id="radarHint">Tap an area — on the chart or the cards — to see its ten steps and set where you are.</p>
-      </section>
+    <section class="tabpane" id="pane-body" aria-labelledby="tabTitle" hidden>
+      <div class="stack">
+        <div id="bodyTop" class="stack"></div>
+        <div id="bodyBalance">
+          <h3 class="sect">Balance</h3>
+          <section class="radar-panel body-radar" aria-label="Balance of the six muscle groups">
+            <svg id="bodyRadar" viewBox="0 0 400 352" role="group" aria-label="Balance of the six muscle groups this week"></svg>
+            <p class="legend" id="bodyLegend"></p>
+            <p class="radar-hint">Each spoke is scaled to that group&#8217;s own target, so arms at 20 sits where chest at 10 does. The shaded band is the target; the outer edge is its top. Tap a spoke to open the group.</p>
+          </section>
+        </div>
+      </div>
+    </section>
 
-      <section aria-label="Movement areas">
-        <div class="cards" id="cards"></div>
-      </section>
-    </main>
+    <section class="tabpane wide" id="pane-skills" aria-labelledby="tabTitle" hidden>
+      <div class="stack">
+        <p class="intro">Six bodyweight ladders, ten steps each: your step in each one, and what&#8217;s next.</p>
+        <div id="skillNudge"></div>
+        <div class="layout skills-layout">
+          <section class="radar-panel" aria-label="Skills radar">
+            <svg id="radar" viewBox="0 0 420 400" role="group" aria-label="Radar chart of your current step in each of the six skills"></svg>
+            <div class="radar-ctrl"><button id="ghostToggle" class="ghostbtn" type="button" aria-pressed="false" hidden>Show where I started</button></div>
+            <p class="radar-hint" id="radarHint">Tap an area &#8212; on the chart or the cards &#8212; to see its ten steps and set where you are.</p>
+          </section>
+          <section aria-label="Skills">
+            <div class="cards skcards" id="cards"></div>
+          </section>
+        </div>
+        <div class="today-links"><button class="tdlink" id="libraryBtn" type="button">&#128218; Exercise library</button></div>
+      </div>
+    </section>
 
-    <footer class="app">
-      <p id="footNote">Your progress is stored only on this device. Use Settings &#8594; backup link to move it to another device.</p>
-    </footer>
+    <section class="tabpane" id="pane-history" aria-labelledby="tabTitle" hidden>
+      <div class="stack" id="historyPane"></div>
+    </section>
   </div>
 
+  <nav class="tabbar" aria-label="Sections">
+    <div class="tabbar-inner">
+      <button class="tab" id="tab-today" data-tab="today" type="button"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.6 10.4 12 3.6l8.4 6.8"/><path d="M5.8 8.8V20h12.4V8.8"/><path d="M10 20v-5.4h4V20"/></svg></span><span class="tl">Today</span></button>
+      <button class="tab" id="tab-body" data-tab="body" type="button"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.6" r="2.3"/><path d="M4.5 8.6c2.6 1 5 1.4 7.5 1.4s4.9-.4 7.5-1.4M12 10v5.6M12 15.6l-3.4 5.8M12 15.6l3.4 5.8"/></svg></span><span class="tl">Body</span></button>
+      <button class="tab logtab" id="logTab" type="button" aria-label="Log a workout"><span class="ti fab" aria-hidden="true">&#65291;</span><span class="tl" aria-hidden="true">Log</span></button>
+      <button class="tab" id="tab-skills" data-tab="skills" type="button"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 21h5.2v-5.2h5.2v-5.2h5.2V5.4h3.4"/><path d="M2.5 21v-3.4"/></svg></span><span class="tl">Skills</span></button>
+      <button class="tab" id="tab-history" data-tab="history" type="button"><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.8 12a8.2 8.2 0 1 0 2.4-5.8"/><path d="M3.4 3.6v4.1h4.1"/><path d="M12 7.6V12l3 1.9"/></svg></span><span class="tl">History</span></button>
+    </div>
+  </nav>
+
   <div id="scrim"></div>
-  <div id="sheet" role="dialog" aria-modal="true" hidden></div>
+  <div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></div>
   <div id="tooltip" role="presentation"></div>
   <button id="restpill" type="button" hidden aria-label="Rest timer — tap to cancel"><span id="restpill-time"></span><span class="restx">&#10005;</span></button>
   <span id="sr-live" class="visually-hidden" aria-live="polite"></span>
@@ -61,6 +91,7 @@
   <script src="data.js"></script>
   <script src="model.js"></script>
   <script src="training.js"></script>
+  <script src="radar.js"></script>
   <script src="qrcode.js"></script>
   <script src="sync.js"></script>
   <script src="app.js"></script>

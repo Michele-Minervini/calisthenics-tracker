@@ -10,7 +10,7 @@
    updates the matching stamp in every script; tests/static-test.js checks
    they agree. */
 
-var VERSION = "milo-v18";
+var VERSION = "milo-v19";
 var ASSETS = [
   ".",
   "index.html",
@@ -19,6 +19,7 @@ var ASSETS = [
   "data.js",
   "model.js",
   "training.js",
+  "radar.js",
   "qrcode.js",
   "sync.js",
   "manifest.webmanifest",
@@ -32,7 +33,7 @@ var ASSETS = [
 // one of them really belongs to VERSION — GitHub's CDN can briefly keep
 // serving an old copy of a file after a deploy, and caching that would pin a
 // mixed release on the phone until the next one.
-var STAMPED = [".", "index.html", "app.js", "data.js", "model.js", "training.js", "qrcode.js", "sync.js"];
+var STAMPED = [".", "index.html", "app.js", "data.js", "model.js", "training.js", "radar.js", "qrcode.js", "sync.js"];
 
 // Cache Storage is shared by every app on the origin (all of
 // michele-minervini.github.io), not just this folder. Cache names therefore

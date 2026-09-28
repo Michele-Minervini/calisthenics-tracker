@@ -104,6 +104,30 @@ keys(VARIATIONS).forEach(area => {
   check("no variation name has disappeared", !gone.length, gone.join(", "));
 }
 
+section("every muscle group has a skill that trains it");
+// The Body tab's group sheet lists "skills that feed it" (TRAINING.feeders):
+// a group no ladder step trains would leave that list empty.
+GROUPS.forEach(g => {
+  const f = Array.from(T.feeders(g));
+  check(g + ": trained by at least one ladder, at some step", f.length > 0, J(f));
+  check(g + ": its feeders are real areas, in AREAS order", same(f, AREAS.map(a => a.id).filter(id => f.indexOf(id) !== -1)), J(f));
+});
+check("the step overrides change who feeds what: bridges feed shoulders (from step 3), handstands feed abs (steps 1–3)",
+  T.feeders("shoulders").indexOf("bridge") !== -1 && T.feeders("abs").indexOf("hspu") !== -1 && T.feeders("chest").length === 1);
+
+section("each ladder's main job (Body rows name these)");
+// A Body row names the ladders whose main job is its group (a whole-area
+// weight of 1: TRAINING.mainFeeders); a group with none says "Helped by …".
+AREAS.forEach(a => {
+  const mains = keys(AREA_GROUPS[a.id].all).filter(g => AREA_GROUPS[a.id].all[g] === 1);
+  check(a.id + ": exactly one main job (" + mains.join(", ") + "), and it is listed for that group", mains.length === 1 &&
+    Array.from(T.mainFeeders(mains[0])).indexOf(a.id) !== -1, J(mains));
+});
+check("arms is the only group without a main-job ladder",
+  same(GROUPS.filter(g => T.mainFeeders(g).length === 0), ["arms"]), J(GROUPS.map(g => [g, Array.from(T.mainFeeders(g))])));
+check("every main-job ladder trains its group at some step (it is in feeders())",
+  GROUPS.every(g => Array.from(T.mainFeeders(g)).every(id => T.feeders(g).indexOf(id) !== -1)));
+
 section("quick logs");
 check("QUICK_GROUPS lists MODEL.GROUPS, in that order", same(keys(QUICK_GROUPS), GROUPS));
 GROUPS.forEach(g => {

@@ -41,7 +41,7 @@ const STAMPED = (stampedBlock.match(/"([^"]+)"/g) || []).map(s => s.slice(1, -1)
 scripts.forEach(s => check("script's stamp is checked at install: " + s, STAMPED.indexOf(s) !== -1));
 
 section("script order");
-const order = ["data.js", "model.js", "training.js", "sync.js", "app.js"];
+const order = ["data.js", "model.js", "training.js", "radar.js", "sync.js", "app.js"];
 check(order.join(", ") + " load in that order",
   order.every(s => scripts.indexOf(s) !== -1) &&
   order.every((s, i) => i === 0 || scripts.indexOf(order[i - 1]) < scripts.indexOf(s)));
@@ -53,6 +53,7 @@ const stamps = {
   "data.js": (read("data.js").match(/^const DATA_BUILD = "([^"]+)";/m) || [])[1],
   "model.js": (read("model.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
   "training.js": (read("training.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
+  "radar.js": (read("radar.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
   "qrcode.js": (read("qrcode.js").match(/BUILD: "([^"]+)"/) || [])[1],
   "sync.js": (read("sync.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
   "app.js": (read("app.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1]

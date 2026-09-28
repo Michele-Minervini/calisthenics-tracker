@@ -33,7 +33,7 @@ var SYNC = (function () {
   // code must never travel inside a backup file or a shared progress link.
   var CONFIG_KEY = "bigsix.sync";
   var TIMEOUT_MS = 15000;
-  var BUILD = "milo-v18";
+  var BUILD = "milo-v19";
 
   // The cloud record for data v5, next to the old one at plain <code>. The
   // security rules accept any key of 20+ characters, so no rule change and
@@ -167,9 +167,11 @@ var SYNC = (function () {
       // A rejected fetch means the request never got an answer: offline, DNS
       // failure, blocked, or our own timeout. The browser's own text for this
       // ("Failed to fetch") isn't worth showing anyone.
-      throw new Error(timedOut
+      var err = new Error(timedOut
         ? "The database took too long to answer."
         : "Couldn't reach the database — you may be offline.");
+      err.kind = "offline";    // not a problem to fix: the gear shows grey, not red
+      throw err;
     });
   }
 

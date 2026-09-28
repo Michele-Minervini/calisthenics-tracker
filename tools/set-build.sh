@@ -23,7 +23,7 @@ set_stamp sw.js      "s/^var VERSION = \"[^\"]*\";\$/var VERSION = \"$new\";/"  
 set_stamp index.html "s/data-build=\"[^\"]*\"/data-build=\"$new\"/"            "data-build=\"$new\""
 set_stamp data.js    "s/^const DATA_BUILD = \"[^\"]*\";/const DATA_BUILD = \"$new\";/" "^const DATA_BUILD = \"$new\";"
 set_stamp qrcode.js  "s/BUILD: \"[^\"]*\"/BUILD: \"$new\"/"                    "BUILD: \"$new\""
-for f in model.js training.js sync.js app.js; do
+for f in model.js training.js radar.js sync.js app.js; do
   set_stamp "$f" "s/^  var BUILD = \"[^\"]*\";/  var BUILD = \"$new\";/"      "^  var BUILD = \"$new\";"
 done
-echo "build ${old:-?} -> $new in sw.js, index.html, data.js, qrcode.js, model.js, training.js, sync.js, app.js"
+echo "build ${old:-?} -> $new in sw.js, index.html, data.js, qrcode.js, model.js, training.js, radar.js, sync.js, app.js"
