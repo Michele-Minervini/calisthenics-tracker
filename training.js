@@ -8,8 +8,11 @@
    sentence built on it, "this point last week", the week strip
    and the month calendar with their group dots, workouts and the
    week streak (History), what counted for a group this week,
-   which skills feed it, and the one nudge. Data only: the words
-   the app shows are app.js's.
+   which skills feed it, and the one nudge. And the gym: the
+   exercises (the catalogue plus your own), which sets were
+   warm-ups, e1RM, one exercise's history and best set, and the
+   double-progression suggestion for its next session. Data only:
+   the words the app shows are app.js's.
 
    Pure functions over plain values: no DOM, no storage, and no
    clock — whoever needs "this week" passes the time in — so
@@ -17,9 +20,18 @@
    any log (sanitized v5 entries of every kind, an empty log, or
    junk) without throwing.
 
+   ONE piece of module state: the exercises registered with
+   useExercises(state.exercises) — custom exercises and tweaks to
+   built-in ones. Every gym lookup (exercise(), and through it what a
+   gym entry counts for) reads it. The app calls useExercises()
+   whenever its state changes; until then only the built-in
+   exercises exist. Tests that register exercises must call it, and
+   call useExercises([]) when they are done.
+
    Reads the tables in data.js (AREAS, GROUP_INFO, AREA_GROUPS,
-   VARIATION_GROUPS, QUICK_GROUPS) and the calendar-day helpers in
-   model.js, so it loads after both and before app.js.
+   VARIATION_GROUPS, QUICK_GROUPS, GYM_EXERCISES) and the
+   calendar-day helpers and sanitizeExercise in model.js, so it
+   loads after both and before app.js.
 
    Dates: a week is Monday 00:00 to Sunday 23:59, local time. A
    day is the calendar day of an entry's ts (MODEL.dateStr), never
@@ -32,12 +44,14 @@
    Numbers: every weight is 1, ½ or ¼, so weekly totals are exact
    multiples of ¼ (floating point adds those without error). Zones
    are decided on the exact total; fmtSets() shows it as "9¾".
+   Stored kg are multiples of 0.25 too, so the warm-up test and the
+   suggestions compare exact values (see score()).
    ============================================================ */
 
 var TRAINING = (function () {
   "use strict";
 
-  var BUILD = "milo-v19";
+  var BUILD = "milo-v20";
 
   var GROUPS = MODEL.GROUPS;
   var startOfDay = MODEL.startOfDay;
@@ -54,6 +68,7 @@ var TRAINING = (function () {
   var BY_AREA = AREA_GROUPS;
   var BY_VARIATION = VARIATION_GROUPS;
   var BY_QUICK = QUICK_GROUPS;
+  var CATALOGUE = GYM_EXERCISES;
 
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
@@ -91,6 +106,33 @@ var TRAINING = (function () {
   // drawn up to this far. 1: the outer ring is the top of the target, and
   // more than that sits on it.
   var RADAR_MAX = 1;
+
+  // The gym (see "The gym" below).
+  // What kg means for an exercise (data.js, GYM_EXERCISES `load`).
+  var LOADS = ["ext", "added", "assist", "bw"];
+  // One hard set of an exercise counts 1 for its group and this for each
+  // group it helps.
+  var HELPER_WEIGHT = 0.5;
+  // Warm-ups: a set of a loaded exercise is a working set when its e1RM is
+  // at least this share of the entry's best set (compared exactly, as
+  // 5 × e1RM ≥ 4 × best).
+  var WARMUP_SHARE = 0.8;
+  // Epley counts reps up to this many.
+  var EPLEY_MAX_REPS = 20;
+  // Double progression: more than this many calendar days since the last
+  // session starts lighter ("return").
+  var RETURN_DAYS = 42;
+  // "return" and "deload" go to this share of the weight (rounded down to
+  // the step), or add the other 10 % of help on an assisted machine.
+  var BACKOFF = 0.9;
+  // A step up bigger than this share of the weight aims BIG_JUMP_REPS
+  // lower than the bottom of the range.
+  var BIG_JUMP = 0.1;
+  var BIG_JUMP_REPS = 2;
+  // Sets a suggestion asks for: the last session's working sets, this
+  // many the first time, never more than MAX_SETS.
+  var DEFAULT_SETS = 3;
+  var MAX_SETS = 10;
 
   // The largest ms a Date can hold.
   var MAX_TIME = 8.64e15;
@@ -238,8 +280,11 @@ var TRAINING = (function () {
   // Hard sets in a ladder entry: every set or hold with a value above 0.
   // (The app only saves positive values; a 0 in an old or restored
   // entry is a failed attempt and counts for nothing.)
+  // In a gym entry: its working sets (workingSets(): warm-ups and sets of
+  // 0 reps left out).
   function hardSets(e) {
     if (!e || !Array.isArray(e.sets)) return 0;
+    if (e.kind === "gym") return workingSets(e).filter(Boolean).length;
     var n = 0;
     e.sets.forEach(function (x) { var v = Number(x); if (isFinite(v) && v > 0) n++; });
     return n;
@@ -261,12 +306,27 @@ var TRAINING = (function () {
     return out;
   }
 
+  // What a gym entry counts for: { sets, weights } — its working sets, and
+  // one set's worth per group (exWeights) — or null when it counts for
+  // nothing: not a gym entry, an exercise nobody knows (it can't be
+  // counted), or no working set. groupWeights() adds it up and
+  // breakdown() lists it, so the two can't disagree.
+  function gymLine(e) {
+    if (!e || typeof e !== "object" || e.kind !== "gym") return null;
+    var ex = exRec(e.exId);
+    if (!ex) return null;
+    var n = hardSets(e);
+    return n ? { sets: n, weights: exWeights(ex) } : null;
+  }
+
   // What one log entry adds to the week, in hard sets per group:
   // { group: sets }, groups in GROUPS order, zeros left out.
   //   ladder  hardSets × setWeights(area, step, variant)
   //   quick   n sets of a group → n × QUICK_GROUPS[group]
-  //   gym     nothing yet (P4: the catalogue's weights × working sets,
-  //           warm-ups filtered out)
+  //   gym     working sets × { its group: 1, each group it helps: ½ }
+  //           (warm-ups and 0-rep sets left out); an exercise nobody
+  //           knows (not built in, not registered) counts for nothing.
+  //           A deleted exercise of your own still counts.
   //   body    a weigh-in: nothing, ever
   function groupWeights(e) {
     if (!e || typeof e !== "object") return {};
@@ -274,6 +334,9 @@ var TRAINING = (function () {
     if (e.kind === undefined) {
       var n = hardSets(e);
       if (n) addInto(acc, setWeights(e.areaId, e.step, e.variant), n);
+    } else if (e.kind === "gym") {
+      var g = gymLine(e);
+      if (g) addInto(acc, g.weights, g.sets);
     } else {
       quickLines(e).forEach(function (q) { addInto(acc, q.weights, q.sets); });
     }
@@ -458,22 +521,24 @@ var TRAINING = (function () {
   //   sets    what the row adds to the group: logged × weight. All rows
   //           together add up exactly to the group's bar (weekVolume).
   //   weight  what one set of it counts here: 1 or ½ for a skill set
-  //           (setWeights, the variation's own map when it has one), 1 or
+  //           (setWeights, the variation's own map when it has one) or a
+  //           gym exercise (1 for its group, ½ for a group it helps), 1 or
   //           ¼ for a quick log's line
   //   own     true when the sets were for this group itself (weight 1: the
   //           group the exercise is for, or the quick log's line for it);
   //           false when they only helped ("6 chest sets, helping")
   //   listed  a quick log's line: the group it was logged for ("chest");
-  //           null for a skill entry
-  //   logged  the sets that were logged: a skill entry's hard sets, or the
-  //           number on the quick log's line
-  // A skill entry is one row. A quick log is one row per group it lists
-  // that counts here (NOTES "Notes for building P3" 2): one listing chest 6
-  // and shoulders 4 gives Shoulders two rows, 4 at 1 and 6 at ¼. Rows of
-  // one quick log come own line first, then GROUPS order. Newest first by
-  // ts; entries at the same ts, the later in the log first. Whole week,
-  // like weekVolume; entries that add nothing (gym until P4, weigh-ins)
-  // aren't listed.
+  //           null for a skill or gym entry
+  //   logged  the sets that were logged: a skill entry's hard sets, a gym
+  //           entry's working sets (warm-ups left out), or the number on
+  //           the quick log's line
+  // A skill or gym entry is one row. A quick log is one row per group it
+  // lists that counts here (NOTES "Notes for building P3" 2): one listing
+  // chest 6 and shoulders 4 gives Shoulders two rows, 4 at 1 and 6 at ¼.
+  // Rows of one quick log come own line first, then GROUPS order. Newest
+  // first by ts; entries at the same ts, the later in the log first. Whole
+  // week, like weekVolume; entries that add nothing (weigh-ins, gym
+  // exercises nobody knows or with no working set) aren't listed.
   function breakdown(log, now, group) {
     if (!isGroup(group)) return [];
     var rows = [];
@@ -481,6 +546,13 @@ var TRAINING = (function () {
       if (e.kind === undefined) {
         var n = hardSets(e), w = setWeights(e.areaId, e.step, e.variant);
         if (n && own(w, group)) rows.push({ entry: e, sets: n * w[group], weight: w[group], own: w[group] >= 1, listed: null, logged: n, i: i, k: 0 });
+        return;
+      }
+      if (e.kind === "gym") {
+        var g = gymLine(e);
+        if (g && own(g.weights, group)) {
+          rows.push({ entry: e, sets: g.sets * g.weights[group], weight: g.weights[group], own: g.weights[group] >= 1, listed: null, logged: g.sets, i: i, k: 0 });
+        }
         return;
       }
       quickLines(e).forEach(function (q) {
@@ -820,6 +892,419 @@ var TRAINING = (function () {
     return Math.min(RADAR_MAX, s / h);
   }
 
+  /* ---------- The gym: exercises ---------- */
+
+  // The catalogue by id: permanent ids (data.js), looked up by own key.
+  var BUILT_IN = dict();
+  CATALOGUE.forEach(function (x) { if (x && typeof x.id === "string") BUILT_IN[x.id] = x; });
+
+  // THE ONE PIECE OF MODULE STATE: every exercise that resolves, by id —
+  // the built-in ones merged with their tweaks, and your own. Replaced
+  // whole by useExercises(); never changed in place.
+  var resolved = dict();
+
+  // A built-in exercise with its tweak (or null), as exercise() hands it out.
+  function resolveBuiltIn(b, o) {
+    var range = o && o.lo !== null && o.hi !== null;
+    return {
+      id: b.id, name: b.name, p: b.p, s: b.s.slice(), equip: b.equip,
+      lo: range ? o.lo : b.lo, hi: range ? o.hi : b.hi,
+      inc: o && o.inc !== null ? o.inc : b.inc,
+      perHand: b.perHand, load: b.load, timed: b.timed,
+      note: o ? o.note : "", custom: false, del: false, known: LOADS.indexOf(b.load) !== -1
+    };
+  }
+
+  // One of your own ("x_" ids), sanitized: `group` becomes p (null when it
+  // isn't one of the six) and `sec` becomes s.
+  function resolveCustom(r) {
+    var p = isGroup(r.group) ? r.group : null;
+    return {
+      id: r.id, name: r.name, p: p, s: r.sec.filter(function (g) { return isGroup(g) && g !== p; }), equip: r.equip,
+      lo: r.lo, hi: r.hi, inc: r.inc, perHand: r.perHand, load: r.load, timed: r.timed,
+      note: r.note, custom: true, del: r.del, known: LOADS.indexOf(r.load) !== -1
+    };
+  }
+
+  // Registers state.exercises — your own exercises ("x_" ids) and tweaks
+  // to built-in ones (rep range, weight step, setup note) — for every gym
+  // lookup: exercise(), exerciseList(), and what a gym entry counts for.
+  // The one piece of state this file keeps (see the top). Each record goes
+  // through MODEL.sanitizeExercise, so anything is safe to pass; for one
+  // id listed twice the newer mts wins. A tweak for an id that isn't built
+  // in is ignored. Anything that isn't a list registers nothing: only the
+  // built-in exercises, untweaked.
+  function useExercises(list) {
+    var recs = dict();
+    (Array.isArray(list) ? list : []).forEach(function (r) {
+      var c = MODEL.sanitizeExercise(r);
+      if (c && !(recs[c.id] && recs[c.id].mts > c.mts)) recs[c.id] = c;
+    });
+    var out = dict();
+    Object.keys(BUILT_IN).forEach(function (id) { out[id] = resolveBuiltIn(BUILT_IN[id], recs[id] || null); });
+    Object.keys(recs).forEach(function (id) {
+      if (id.indexOf("x_") === 0 && !own(BUILT_IN, id)) out[id] = resolveCustom(recs[id]);
+    });
+    resolved = out;
+  }
+
+  // The registered record itself (don't change it), or null.
+  function exRec(exId) {
+    return (typeof exId === "string" && Object.prototype.hasOwnProperty.call(resolved, exId)) ? resolved[exId] : null;
+  }
+
+  function copyEx(x) {
+    var c = {};
+    Object.keys(x).forEach(function (k) { c[k] = x[k]; });
+    c.s = x.s.slice();
+    return c;
+  }
+
+  // An exercise, ready to show and to progress:
+  //   { id, name, p, s, equip, lo, hi, inc, perHand, load, timed, note,
+  //     custom, del, known }
+  //   p        the group one hard set counts 1 for (null for one of your
+  //            own whose group isn't one of the six)
+  //   s        the groups it counts ½ for, in GROUPS order
+  //   lo, hi   rep range (seconds when timed); inc the kg step. A tweak's
+  //            values replace the catalogue's when they aren't null.
+  //   note     the setup note ("" when none)
+  //   custom   one of your own ("x_" id)
+  //   del      one of your own that was removed from the list: it still
+  //            resolves, so old entries keep their name and still count
+  //   known    this version knows what its kg mean (load is ext, added,
+  //            assist or bw); false for a load type from a newer version:
+  //            then every set with reps counts, and it progresses by reps
+  // null for an id that is neither built in nor registered (the app shows
+  // "Unknown exercise"), including names every object inherits. A fresh
+  // copy each time.
+  function exercise(exId) {
+    var x = exRec(exId);
+    return x ? copyEx(x) : null;
+  }
+
+  // Every exercise that isn't deleted, built-in and your own, grouped by p
+  // in GROUPS order (one without a group last), each group by name (case
+  // ignored), then id. Fresh copies.
+  function exerciseList() {
+    var rank = function (x) { var i = GROUPS.indexOf(x.p); return i === -1 ? GROUPS.length : i; };
+    var low = function (s) { return String(s).toLowerCase(); };
+    return Object.keys(resolved).map(function (id) { return resolved[id]; })
+      .filter(function (x) { return !x.del; })
+      .sort(function (a, b) {
+        return (rank(a) - rank(b)) ||
+          (low(a.name) < low(b.name) ? -1 : (low(a.name) > low(b.name) ? 1 : 0)) ||
+          (a.id < b.id ? -1 : (a.id > b.id ? 1 : 0));
+      })
+      .map(copyEx);
+  }
+
+  // One hard set of an exercise per group: { p: 1, each of s: ½ }.
+  function exWeights(ex) {
+    var w = {};
+    ex.s.forEach(function (g) { if (isGroup(g)) w[g] = HELPER_WEIGHT; });
+    if (isGroup(ex.p)) w[ex.p] = 1;
+    return cleanWeights(w);
+  }
+
+  /* ---------- The gym: sets ---------- */
+
+  // A number from a stored set: reps (or seconds), or kg.
+  function num(x) {
+    if (x === null || x === undefined || x === "" || typeof x === "boolean") return 0;
+    var n = Number(x);
+    return isFinite(n) ? n : 0;
+  }
+  // The kg of set i of a gym entry: 0 when missing or unusable, and always
+  // 0 for a bodyweight-only exercise.
+  function kgAt(e, i, ex) {
+    if (ex && ex.load === "bw") return 0;
+    var k = Array.isArray(e.kg) ? num(e.kg[i]) : 0;
+    return k > 0 ? k : 0;
+  }
+
+  // e1RM × 30, exactly: kg × (30 + reps) with reps up to EPLEY_MAX_REPS,
+  // kg × 30 for a single; 0 without weight or reps. Stored kg are
+  // multiples of 0.25, so these are exact and compare without rounding.
+  function score(kg, reps) {
+    var w = num(kg), r = num(reps);
+    if (!(w > 0) || !(r > 0)) return 0;
+    return r === 1 ? w * 30 : w * (30 + Math.min(r, EPLEY_MAX_REPS));
+  }
+
+  // Estimated one-rep max (Epley): kg × (1 + min(reps, 20) / 30); a single
+  // is its own kg; 0 when kg or reps is 0 or less (or not a number). For a
+  // dumbbell exercise kg is per hand, and so is this.
+  function e1rm(kg, reps) {
+    return score(kg, reps) / 30;
+  }
+
+  // Whether this exercise's warm-ups can be told from its weights: an
+  // external weight that isn't held for time. Not added weight (dips,
+  // weighted chin-ups): the load there is body weight + the added kg, and
+  // without body weight (weigh-ins come later) comparing the added kg alone
+  // would call real working sets warm-ups.
+  function filtersWarmups(ex) {
+    return !!ex && !ex.timed && ex.load === "ext";
+  }
+
+  // Which sets of an entry are working sets: [true|false] per set.
+  //   gym, load ext or added (not timed), some set with kg > 0: a set is
+  //     working when its e1RM is at least WARMUP_SHARE (0.8) of the
+  //     entry's best set's — lighter sets were warm-ups. 60 × 12, then
+  //     100 × 8, 8, 7 → [false, true, true, true].
+  //   gym, anything else (assist, bw, timed, all at 0 kg, an exercise
+  //     nobody knows): every set with reps above 0
+  //   a skill entry: every set above 0 (as hardSets counts them)
+  // A set of 0 reps is never working. Takes a draft too
+  // ({ kind: "gym", exId, sets, kg }); [] for anything without sets.
+  function workingSets(e) {
+    if (!e || typeof e !== "object" || !Array.isArray(e.sets)) return [];
+    var reps = e.sets.map(num);
+    var ex = e.kind === "gym" ? exRec(e.exId) : null;
+    if (!filtersWarmups(ex)) return reps.map(function (r) { return r > 0; });
+    var scores = reps.map(function (r, i) { return score(kgAt(e, i, ex), r); });
+    var best = Math.max.apply(null, [0].concat(scores));
+    if (!(best > 0)) return reps.map(function (r) { return r > 0; });
+    // s ≥ 0.8 × best, exactly (both sides are multiples of 0.25).
+    return scores.map(function (s, i) { return reps[i] > 0 && s * 5 >= best * 4; });
+  }
+
+  // kg to a multiple of inc: mode "down" (floor), "up" (ceiling), anything
+  // else the nearest. roundTo(56.25, 2.5, "down") → 55. An inc that isn't
+  // above 0 counts as 0.25; kg that isn't a number gives 0.
+  function roundTo(kg, inc, mode) {
+    var x = Number(kg), step = Number(inc);
+    if (kg === null || kg === "" || typeof kg === "boolean" || !isFinite(x)) return 0;
+    if (!(step > 0) || !isFinite(step)) step = 0.25;
+    var q = x / step, k;
+    // The 1e-9 keeps floating-point noise from moving a whole step:
+    // 1.1 × 25 = 27.500000000000004 is 27.5 up to 2.5, not 30, and
+    // (1 − 0.9) × 25 = 2.4999999999999996 is 2.5 down, not 0.
+    if (mode === "down") k = Math.floor(q + 1e-9);
+    else if (mode === "up") k = Math.ceil(q - 1e-9);
+    else k = Math.round(q);
+    return Math.round(k * step * 1e6) / 1e6 + 0;
+  }
+
+  /* ---------- The gym: one exercise's history ---------- */
+
+  // That exercise's gym entries, newest first (same ts: the later in the
+  // log first). The log's own objects: don't change them.
+  //   opts.before   a time: only entries on calendar days before the one
+  //                 containing it (a before that isn't a time gives [])
+  //   opts.exclude  an entry id to leave out (the one being edited)
+  // Entries of any exercise id, known or not; entries with no working set
+  // are listed too.
+  function sessionsFor(log, exId, opts) {
+    if (!Array.isArray(log) || typeof exId !== "string") return [];
+    var o = (opts && typeof opts === "object") ? opts : {};
+    var until = Infinity;
+    if (o.before !== undefined && o.before !== null) {
+      if (!validTime(o.before)) return [];
+      until = dayStart(Number(o.before));
+    }
+    var skip = typeof o.exclude === "string" ? o.exclude : null;
+    var out = [];
+    log.forEach(function (e, i) {
+      if (!e || typeof e !== "object" || e.kind !== "gym" || e.exId !== exId || !Array.isArray(e.sets)) return;
+      var t = timeOf(e);
+      if (!(t < until) || (skip !== null && e.id === skip)) return;
+      out.push({ e: e, t: t, i: i });
+    });
+    out.sort(function (a, b) { return (b.t - a.t) || (b.i - a.i); });
+    return out.map(function (x) { return x.e; });
+  }
+
+  // The newest of sessionsFor(log, exId, opts), or null.
+  function lastSession(log, exId, opts) {
+    return sessionsFor(log, exId, opts)[0] || null;
+  }
+
+  // How best() and suggest() treat an exercise's weight:
+  //   "load"    more kg is harder (ext, and added with weight on)
+  //   "assist"  less kg is harder (an assisted machine)
+  //   "reps"    kg doesn't make it harder here: bodyweight only, timed,
+  //             or a load type this version doesn't know
+  function weightMode(ex) {
+    if (!ex.known || ex.timed || ex.load === "bw") return "reps";
+    return ex.load === "assist" ? "assist" : "load";
+  }
+
+  // The best working set of an exercise ever (or among sessionsFor(log,
+  // exId, opts)): { kg, reps, e1rm, ts, id }
+  //   ext / added  the highest e1RM (then the heavier, then more reps);
+  //                sets without weight rank by reps below any set with
+  //   assist       the least help (kg), then the most reps
+  //   bw, timed    the most reps (seconds), then the most kg
+  // e1rm is e1rm(kg, reps) for ext and added (0 without weight), 0 for the
+  // others. A tie keeps the earliest set. null when there is no working
+  // set, or the exercise is unknown.
+  function best(log, exId, opts) {
+    var ex = exRec(exId);
+    if (!ex) return null;
+    var mode = weightMode(ex), list = sessionsFor(log, exId, opts), top = null;
+    var better = function (a, b) {
+      if (mode === "load") {
+        var sa = score(a.kg, a.reps), sb = score(b.kg, b.reps);
+        if (sa !== sb) return sa > sb;
+        return a.kg !== b.kg ? a.kg > b.kg : a.reps > b.reps;
+      }
+      if (mode === "assist") return a.kg !== b.kg ? a.kg < b.kg : a.reps > b.reps;
+      return a.reps !== b.reps ? a.reps > b.reps : a.kg > b.kg;
+    };
+    for (var k = list.length - 1; k >= 0; k--) {
+      var e = list[k], flags = workingSets(e);
+      for (var i = 0; i < e.sets.length; i++) {
+        if (!flags[i]) continue;
+        var c = { kg: kgAt(e, i, ex), reps: num(e.sets[i]), ts: timeOf(e), id: e.id };
+        if (!top || better(c, top)) top = c;
+      }
+    }
+    if (!top) return null;
+    // An estimated max only for external weight: for added weight it would
+    // be an estimate of the added kg alone, which means nothing.
+    return { kg: top.kg, reps: top.reps, e1rm: mode === "load" && ex.load === "ext" ? e1rm(top.kg, top.reps) : 0, ts: top.ts, id: top.id };
+  }
+
+  /* ---------- The gym: the next session ---------- */
+
+  // What a past session was, for the double progression, or null when it
+  // has no working set:
+  //   W      its top weight: the heaviest working set (the least help on
+  //          an assisted machine; 0 for bodyweight only)
+  //   at     the reps of its working sets at W, in order
+  //   n      how many working sets it had (at W or not)
+  function sessionTop(e, ex) {
+    var flags = workingSets(e), reps = [], kg = [];
+    e.sets.forEach(function (x, i) { if (flags[i]) { reps.push(num(x)); kg.push(kgAt(e, i, ex)); } });
+    if (!reps.length) return null;
+    var W = ex.load === "assist" && ex.known ? Math.min.apply(null, kg) : Math.max.apply(null, kg);
+    return {
+      id: e.id, ts: timeOf(e), W: W, n: reps.length,
+      at: reps.filter(function (r, i) { return kg[i] === W; })
+    };
+  }
+
+  // The sessions of one calendar day are one session (two entries of the same
+  // exercise on a day, e.g. after changing the day of one): their sets in
+  // time order, under the latest entry's id and time. Input and output are
+  // newest first.
+  var SESSIONS_LOOKED_AT = 12;
+  function mergeDays(list) {
+    var out = [];
+    list.forEach(function (e) {
+      var k = MODEL.dateStr(timeOf(e)), cur = out.length ? out[out.length - 1] : null;
+      if (cur && cur.day === k) {
+        cur.sets = e.sets.concat(cur.sets);
+        cur.kg = (Array.isArray(e.kg) ? e.kg : []).concat(cur.kg);
+      } else {
+        out.push({ day: k, id: e.id, ts: e.ts, kind: "gym", exId: e.exId, sets: e.sets.slice(), kg: Array.isArray(e.kg) ? e.kg.slice() : [] });
+      }
+    });
+    return out;
+  }
+
+  function fill(x, n) { var out = []; for (var i = 0; i < n; i++) out.push(x); return out; }
+  function sum(list) { return list.reduce(function (s, x) { return s + x; }, 0); }
+
+  // n targets from the reps at W, each min(hi, r + step) — one more rep, or
+  // for a timed hold TIMED_STEP more seconds (one second is no goal); sets
+  // past the last one at W repeat its target.
+  var TIMED_STEP = 5;
+  function oneMore(at, n, hi, step) {
+    var out = [];
+    for (var i = 0; i < n; i++) out.push(Math.min(hi, at[Math.min(i, at.length - 1)] + (step || 1)));
+    return out;
+  }
+
+  // The double-progression suggestion for the next session of an exercise,
+  // from its sessions on days before now's (today's entries and
+  // opts.exclude, the entry being edited, left out; sessions without a
+  // working set skipped). Plain data:
+  //   { kind, kg, sets, targets: [reps per set], from }
+  //   from     { id, ts, kg: W, reps: [the working reps at W] } of the
+  //            last session, or null when there is none
+  //   sets     the last session's working sets, 1–10 (3 when none)
+  //   targets  one per set (seconds when timed)
+  // W is the last session's top weight (sessionTop). kind, checked in
+  // this order:
+  //   "first"   no earlier session, or ext with W = 0: kg null, 3 sets of
+  //             hi ("pick a weight you could lift about hi + 2 times")
+  //   "return"  more than 42 calendar days since the last session: 90 %
+  //             of W rounded down to inc (never 0: then W); assisted: W +
+  //             10 % rounded up to inc; reps mode: W. Targets lo.
+  //   Reps mode (bw, timed, unknown load, and added or assist at W = 0):
+  //   "harder"  every working set at W reached hi: kg W, targets hi (the
+  //             app says: add weight for added, else a harder variation)
+  //   "reps"    otherwise: kg W, targets min(hi, r + 1)
+  //   Weight mode (ext; added and assist with W > 0):
+  //   "up"      every working set at W reached hi: kg W + inc (assisted:
+  //             W − inc, not below 0); targets lo, or lo − 2 (at least 1)
+  //             when the change is more than 10 % of W
+  //   "deload"  the last two sessions both at W, both with a working set
+  //             at W under lo, and the latest with no more reps at W in
+  //             total than the one before: kg as for "return", targets lo
+  //   "same"    otherwise: kg W, targets min(hi, r + 1)
+  // lo, hi and inc are the exercise's own (tweaks included). null for an
+  // exercise nobody knows, or a now that isn't a time.
+  function suggest(exId, log, now, opts) {
+    var ex = exRec(exId);
+    if (!ex || !validTime(now)) return null;
+    var o = (opts && typeof opts === "object") ? opts : {};
+    var lo = ex.lo, hi = ex.hi, inc = ex.inc;
+    var list = mergeDays(sessionsFor(log, exId, { before: Number(now), exclude: o.exclude }));
+    var tops = [];
+    for (var i = 0; i < list.length && tops.length < SESSIONS_LOOKED_AT; i++) {
+      var t = sessionTop(list[i], ex);
+      if (t) tops.push(t);
+    }
+    var last = tops[0];
+    var make = function (kind, kg, n, targets) {
+      return { kind: kind, kg: kg, sets: n, targets: targets, from: last ? { id: last.id, ts: last.ts, kg: last.W, reps: last.at.slice() } : null };
+    };
+    var mode = weightMode(ex);
+    if (!last || (mode === "load" && ex.load === "ext" && !(last.W > 0))) return make("first", null, DEFAULT_SETS, fill(hi, DEFAULT_SETS));
+    var W = last.W;
+    if (!(W > 0)) mode = "reps";   // added or assisted with no weight on: bodyweight
+    var n = Math.max(1, Math.min(MAX_SETS, last.n));
+    var lighter = function () {
+      if (mode === "reps") return W;
+      if (mode === "assist") return roundTo(W * (2 - BACKOFF), inc, "up");
+      var k = roundTo(W * BACKOFF, inc, "down");
+      return k > 0 ? k : W;
+    };
+    if (dayDelta(last.ts, Number(now)) > RETURN_DAYS) return make("return", lighter(), n, fill(lo, n));
+    var topped = last.at.every(function (r) { return r >= hi; });
+    if (mode === "reps") return make(topped ? "harder" : "reps", W, n, oneMore(last.at, n, hi, ex.timed ? TIMED_STEP : 1));
+    if (topped) {
+      var kg = mode === "assist" ? Math.max(0, W - inc) : W + inc;
+      // A change of exactly 10 % divides to exactly 0.1 (the double nearest
+      // a tenth, as the constant is), so it isn't "more than".
+      var big = Math.abs(kg - W) / W > BIG_JUMP;
+      return make("up", kg, n, fill(big ? Math.max(1, lo - BIG_JUMP_REPS) : lo, n));
+    }
+    var prev = tops[1];
+    // The floor is lo, or lo − 2 while you're still settling in after a big
+    // step up to W (the targets "up" gave then): falling short of lo there
+    // is expected, not a reason to go back down.
+    var floor = lo;
+    for (var j = 1; j < tops.length; j++) {
+      if (tops[j].W === W) continue;
+      var from = tops[j].W;
+      var harder = mode === "assist" ? W < from : W > from;
+      if (harder && from > 0 && Math.abs(W - from) / from > BIG_JUMP) floor = Math.max(1, lo - BIG_JUMP_REPS);
+      break;
+    }
+    var short = function (s) { return s.at.some(function (r) { return r < floor; }); };
+    if (prev && prev.W === W && short(last) && short(prev) && sum(last.at) <= sum(prev.at)) {
+      return make("deload", lighter(), n, fill(lo, n));
+    }
+    return make("same", W, n, oneMore(last.at, n, hi));
+  }
+
+  useExercises([]);
+
   /* ---------- Display ---------- */
 
   var QUARTERS = ["", "\u00bc", "\u00bd", "\u00be"];
@@ -874,6 +1359,26 @@ var TRAINING = (function () {
     groupNudge: groupNudge,
     radarShare: radarShare,
     fmtSets: fmtSets,
+    useExercises: useExercises,
+    exercise: exercise,
+    exerciseList: exerciseList,
+    e1rm: e1rm,
+    workingSets: workingSets,
+    roundTo: roundTo,
+    sessionsFor: sessionsFor,
+    lastSession: lastSession,
+    best: best,
+    suggest: suggest,
+    LOADS: LOADS,
+    HELPER_WEIGHT: HELPER_WEIGHT,
+    WARMUP_SHARE: WARMUP_SHARE,
+    EPLEY_MAX_REPS: EPLEY_MAX_REPS,
+    RETURN_DAYS: RETURN_DAYS,
+    BACKOFF: BACKOFF,
+    BIG_JUMP: BIG_JUMP,
+    BIG_JUMP_REPS: BIG_JUMP_REPS,
+    DEFAULT_SETS: DEFAULT_SETS,
+    MAX_SETS: MAX_SETS,
     DOT_SETS: DOT_SETS,
     STREAK_WORKOUTS: STREAK_WORKOUTS,
     HISTORY_WEEKS: HISTORY_WEEKS,

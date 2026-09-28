@@ -340,5 +340,5 @@ var QR = (function () {
   }
 
   // Build stamp: app.js refuses to run on files from two different releases.
-  return { generate: generate, BUILD: "milo-v19" };
+  return { generate: generate, BUILD: "milo-v20" };
 })();

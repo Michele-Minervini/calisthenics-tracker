@@ -33,15 +33,25 @@ Four tabs along the bottom, with **＋ Log** in the middle of them:
   more workouts) and your total; a month calendar with a dot per muscle group
   trained; and every workout by day (All / Gym / Bodyweight) with the steps you
   reached. Tap an entry to change or delete it.
-- **＋ Log.** Today's session moves in one tap, any other skill, or a **quick
-  gym log**: the working sets you did per muscle group (today, yesterday or any
-  earlier day), with a note.
+- **＋ Log.** Today's session moves in one tap, any other skill, a **gym
+  exercise**, or a **quick gym log** (just the working sets per muscle group,
+  when you don't want to log exercises).
+- **Gym exercises.** About 40 common exercises (barbell, dumbbells, machines,
+  cables, dips, planks…) plus your own. Log each set as reps × kg and tick it:
+  every tick is saved at once, and starts the rest timer. Milo shows what you
+  did last time and suggests the next step — add weight when you hit the top of
+  the rep range on every set, otherwise one more rep, and lighter after a long
+  break. Warm-up sets are recognised and don't count toward the weekly bars.
+  Each exercise has its own rep range, weight step and setup note ("seat 4"),
+  which you can change.
 - **Logging a skill session.** Enter your sets and reps (or hold time) and
   save. The app checks the result against the goals and marks the standard you
   met automatically; when you hit the Progression goal it offers to move you up
   a step.
 - **Rest timer.** One-tap presets (1/2/3/5 min) start a floating countdown that
-  keeps running while you browse other exercises and pings when it's done.
+  keeps running while you browse other exercises and pings when it's done; tap
+  it for +30 s or Skip. Gym sets use their own rest (Settings), and Milo can keep
+  the screen on during a workout.
   Each exercise also shows a top-set sparkline over time.
 - **It tells you what to do.** Every movement comes with a prescription — the
   exercise, the sets and reps, and which standard you're chasing — worked out

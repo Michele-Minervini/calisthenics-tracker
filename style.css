@@ -754,14 +754,24 @@ header.app {
   background: var(--ink);
   color: var(--page);
   border-radius: 999px;
-  padding: 11px 16px 11px 20px;
+  padding: 4px;
   font-size: 0.95rem;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
   box-shadow: var(--shadow);
 }
 #restpill[hidden] { display: none !important; }
-#restpill .restx { opacity: 0.85; font-weight: 400; }
+#restpill button { color: inherit; font: inherit; min-height: 40px; border-radius: 999px; white-space: nowrap; }
+/* Centred like the toast (left: 50% capped its width at half the screen,
+   so opening +30 s / Skip wrapped it). With a sheet open it docks just
+   above the sheet's footer, clear of the set rows, and the toast goes above it. */
+#restpill { left: 16px; right: 16px; margin: 0 auto; width: fit-content; transform: none; }
+body.sheet-open #restpill { bottom: calc(var(--bottom-chrome) + 10px); }
+body.sheet-open.pill-on #toast { bottom: calc(var(--bottom-chrome) + 72px); }
+#restMain { padding: 0 16px; }
+.restmenu { display: inline-flex; gap: 4px; }
+.restmenu[hidden] { display: none; }
+.restmenu button { padding: 0 14px; background: rgba(127, 127, 127, 0.28); font-weight: 700; }
 #restpill.done { background: var(--good); color: var(--page); }
 
 .visually-hidden {
@@ -1892,4 +1902,104 @@ body.pill-on #sheet .sheet-body { padding-bottom: calc(24px + env(safe-area-inse
 
 @media (prefers-reduced-motion: reduce) {
   .tab .ti { transition: none; }
+}
+
+
+/* ==========================================================
+   Milo: gym exercises (picker, gym sheet, exercise, your own)
+   ========================================================== */
+
+.exsearch {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 2px 0 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.exsect h4 { display: flex; align-items: center; gap: 7px; }
+/* Exercise rows have no icon: text and chevron only. */
+.librow.exrow, .exsheet .librow { grid-template-columns: minmax(0, 1fr) auto; }
+.exinfo { width: 32px; height: 32px; margin: -6px 0 -6px 2px; vertical-align: middle; }
+.exsect[hidden], .exrow[hidden] { display: none; }
+.exmine { font-size: 0.66rem; font-weight: 700; color: var(--muted); border: 1px solid var(--axis); border-radius: 999px; padding: 1px 6px; margin-left: 4px; vertical-align: 1px; }
+
+.gympane .chips { margin-top: 2px; }
+.glast { margin: 12px 2px 4px; font-size: 0.84rem; color: var(--ink-2); }
+.glast b { color: var(--ink); }
+.gymrx { margin: 8px 0 4px; gap: 4px; }
+.gymrx .rxgoal { font-weight: 500; line-height: 1.45; }
+.gymrx .rxgoal b { font-weight: 750; }
+
+.gsets { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.gset {
+  display: grid;
+  grid-template-columns: 1.6rem auto minmax(3.2rem, 1fr) auto 44px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.gpane-bw .gset { grid-template-columns: 1.6rem minmax(3.2rem, 1fr) auto 44px; }
+.gnum { font-weight: 750; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+.gset .stepper { gap: 3px; }
+.gset .stepbtn { width: 34px; height: 40px; }
+.gset .kgval { width: 4.2rem; }
+.gset .repval { width: 100%; min-width: 0; }
+.gset .repval::placeholder, .gset .kgval::placeholder { color: var(--muted); opacity: 0.8; }
+.gunit { font-size: 0.74rem; color: var(--muted); }
+.gtick {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--axis);
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.gset.done { border-color: var(--area); background: rgba(127, 127, 127, 0.06); background: color-mix(in srgb, var(--area) 8%, var(--surface)); }
+.gset.done .gtick { background: var(--area); border-color: var(--area); color: var(--btn-ink); }
+.gset.done .gnum { color: var(--area); }
+.gset.warm { opacity: 0.62; }
+.gset.warm .gnum { font-size: 0.8rem; }
+.gtip { margin: 8px 2px 4px; }
+.gymfoot { display: flex; gap: 8px; }
+.gymfoot .btn { flex: 1; }
+.gymfoot .btn.primary { flex: 1.4; }
+
+.exsheet p { font-size: 0.88rem; color: var(--ink-2); margin: 6px 0; }
+.exnote {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 6px 0 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+}
+.exnotel { display: block; margin-top: 14px; }
+.exform .vlab { display: block; }
+.exform .volrow .vlab { display: inline; }
+.exform .volrow .stepval { width: 5rem; }
+.exchk { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 0.9rem; color: var(--ink-2); }
+.exchk input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+@media (max-width: 359px) {
+  .gset { grid-template-columns: 1.2rem auto minmax(2.6rem, 1fr) 40px; }
+  .gset .gunit { display: none; }
+  .gset .stepbtn { width: 30px; }
+  .gset .kgval { width: 3.6rem; }
+  .gtick { width: 40px; height: 40px; }
+  .gpane-bw .gset { grid-template-columns: 1.2rem minmax(2.6rem, 1fr) 40px; }
 }

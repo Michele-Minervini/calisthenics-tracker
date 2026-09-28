@@ -17,6 +17,7 @@ All tiers are built, tested, and deployed (service worker `bigsix-v10`).
 | **Tier 1** | v5 | Log a session (sets/reps or hold time); auto-detection of the Beginner/Intermediate/Progression standard with a move-up prompt; global rest timer; training-history list; downloadable full backup file. |
 | **Tier 2** | v7–v8 | Weekly routine + "Today's session" card; smart nudge; ghost radar (past vs now); GitHub-style training heatmap; streaks; milestone timeline; per-exercise sparkline; edit a logged session; QR code for the backup link. |
 | **Tier 3** | v9–v10 | Day detail (tap a heatmap square for that day's sessions); **optional cloud sync** across devices, paired by QR. |
+| **Milo P4** | milo-v20 | **Gym exercises**: a catalogue (data.js `GYM_EXERCISES`, permanent ids) plus your own (`x_…` in `state.exercises`), a gym sheet with reps × kg per set where every ✓ saves at once, last time, a double-progression suggestion, warm-up sets recognised (and not counted), an exercise sheet (your numbers, rep range / weight step / setup note, history). Rest: +30 s / Skip, separate gym rest, kept across reloads; optional keep-screen-on. |
 | **Milo P3** | milo-v19 | **Four tabs** (Today · Body · Skills · History) with ＋ Log in the middle of the tab bar. Body: hard sets per muscle group vs target, pace, "this point last week", a balance radar, a sheet per group (what counted, 8 weeks, the skills that train it). History: week streak, month calendar with a dot per group, filterable list with milestones. Weekly targets in Settings; sync status on the gear. The day streak and heatmap are gone. |
 | **Milo P1–P2a** | v16–milo-v18 | Renamed **Milo**. Data v5 (entry kinds, per-field settings sync, a new sync record, guards against old copies), tests; quick **gym day** log; home bars of **hard sets per muscle group this week** against 10–20 (arms/legs 20–40). Plan for the rest: `~/.claude/plans/i-want-to-rename-distributed-goblet.md` (P3 tabs, P4 gym exercises, P2b move to /milo/, P5–P7). |
 | **Tier 4** | v15 | **The plan.** Every movement carries a prescription (exercise, sets, reps, standard being chased) derived from your current position; guided session walkthrough; 38 swap variations; exercise library; week view with a per-area "what's next" map. |
@@ -89,9 +90,17 @@ None committed — just a menu for later:
   links use it). Sheets stack on top: a sheet opened from a sheet gets
   "‹ <previous title>" automatically (`viewTitle`), and a view type this
   version doesn't know is dropped instead of opening Settings.
+- **Gym logging saves on every ✓.** One log entry per exercise per workout
+  (`kind: "gym"`); the first tick creates it with a stable id, later ticks
+  update it, un-ticking the last set removes it. Untyped/unticked rows live only
+  in a per-device draft (`milo.gymDraft`). Exercise ids in data.js are stored in
+  logs forever: never rename or remove one (tests/data-test.js freezes the list);
+  add new ones instead. `TRAINING.useExercises(state.exercises)` must run
+  whenever state changes (refresh() does it) so custom exercises count.
 - **Per-device flags** (localStorage, never synced): `milo.whatsnew`
   ("What's new" card, only on devices that had data before P3) and
-  `milo.come` ("Coming from another device?" on an untouched device).
+  `milo.come` ("Coming from another device?" on an untouched device),
+  `milo.rest` (a running rest timer's end time), `milo.gymDraft`.
 - **Weekly volume is counted, never stored** (training.js). Each hard set counts
   1 for its main muscle group and ½ for each helper (data.js `AREA_GROUPS`,
   per-step overrides, `VARIATION_GROUPS`); a quick gym day gives its groups'

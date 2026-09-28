@@ -23,7 +23,7 @@
 (function () {
   "use strict";
 
-  var BUILD = "milo-v19";
+  var BUILD = "milo-v20";
   var UPDATE_TRIES_KEY = "bigsix.updateTries";   // must be set before the check below uses it
 
   // Every file carries the same build stamp. If they disagree, the browser has
@@ -652,9 +652,15 @@
   }
   function vibrate(pat) { try { if (navigator.vibrate) navigator.vibrate(pat); } catch (e) { /* ignore */ } }
 
-  function startRest(seconds) {
+  // opts.gym: started by ticking a gym set (restGym); it doesn't change the
+  // skill-session rest you last picked. The end time is kept per device, so
+  // a reload or a swiped-away app comes back to the same countdown.
+  var REST_KEY = "milo.rest";
+  function startRest(seconds, opts) {
     restEnd = nowMs() + seconds * 1000;
-    if (state.settings.restSeconds !== seconds) { setPref("restSeconds", seconds); saveState(); }
+    if (!(opts && opts.gym) && state.settings.restSeconds !== seconds) { setPref("restSeconds", seconds); saveState(); }
+    try { localStorage.setItem(REST_KEY, String(restEnd)); } catch (e) { /* best effort */ }
+    closeRestMenu();
     var sr = $("#sr-live"); if (sr) sr.textContent = ""; // reset so the next "complete" re-announces
     ensureAudio();
     var pill = $("#restpill");
@@ -664,6 +670,7 @@
     updateRestPill();
     clearInterval(restInterval);
     restInterval = setInterval(updateRestPill, 250);
+    updateWakeLock();
   }
   function updateRestPill() {
     var pill = $("#restpill");
@@ -671,6 +678,9 @@
     var remain = (restEnd - nowMs()) / 1000;
     if (remain <= 0) {
       clearInterval(restInterval); restInterval = null;
+      try { localStorage.removeItem(REST_KEY); } catch (e) { /* ignore */ }
+      closeRestMenu();
+      updateWakeLock();
       pill.classList.add("done");
       label.textContent = "Rest done";
       var sr = $("#sr-live"); if (sr) sr.textContent = "Rest complete";
@@ -680,8 +690,82 @@
     }
     label.textContent = "Rest " + fmtTime(remain);
   }
-  function cancelRest() { clearInterval(restInterval); restInterval = null; hideRestPill(); }
-  function hideRestPill() { var p = $("#restpill"); p.hidden = true; p.classList.remove("done"); document.body.classList.remove("pill-on"); }
+  function cancelRest() {
+    clearInterval(restInterval); restInterval = null;
+    try { localStorage.removeItem(REST_KEY); } catch (e) { /* ignore */ }
+    hideRestPill();
+    updateWakeLock();
+  }
+  function hideRestPill() {
+    var p = $("#restpill");
+    var had = p.contains(document.activeElement);
+    p.hidden = true; p.classList.remove("done");
+    closeRestMenu();
+    if (had) restoreFocus(null, "");
+    document.body.classList.remove("pill-on");
+  }
+  function addRest(sec) {
+    if (!restInterval) return;
+    restEnd += sec * 1000;
+    try { localStorage.setItem(REST_KEY, String(restEnd)); } catch (e) { /* best effort */ }
+    updateRestPill();
+  }
+  // Tapping the pill offers +30 s and Skip, instead of cancelling at once.
+  function toggleRestMenu() {
+    var m = $("#restMenu"), b = $("#restMain");
+    if (!m) return;
+    if ($("#restpill").classList.contains("done")) { hideRestPill(); return; }
+    m.hidden = !m.hidden;
+    b.setAttribute("aria-expanded", String(!m.hidden));
+  }
+  function closeRestMenu() {
+    var m = $("#restMenu"), b = $("#restMain");
+    var had = m && !m.hidden && m.contains(document.activeElement);
+    if (m) m.hidden = true;
+    if (b) b.setAttribute("aria-expanded", "false");
+    if (had && b) { try { b.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  // A countdown still running from before a reload.
+  function resumeRest() {
+    var end = 0;
+    try { end = Number(localStorage.getItem(REST_KEY)) || 0; } catch (e) { /* ignore */ }
+    if (end > nowMs() + 1000) {
+      restEnd = end;
+      var pill = $("#restpill");
+      pill.hidden = false;
+      pill.classList.remove("done");
+      document.body.classList.add("pill-on");
+      updateRestPill();
+      clearInterval(restInterval);
+      restInterval = setInterval(updateRestPill, 250);
+      updateWakeLock();
+    } else {
+      try { localStorage.removeItem(REST_KEY); } catch (e) { /* ignore */ }
+    }
+  }
+
+  /* Keep the screen on (Settings): while a gym exercise is open or a rest
+     timer runs. The browser drops the lock whenever the app is hidden, so
+     it is asked for again on coming back. */
+  var wakeLock = null, wakeAsking = false;
+  function updateWakeLock() {
+    if (!navigator.wakeLock) return;
+    var top = uiStack.length ? uiStack[uiStack.length - 1] : null;
+    var want = !!state.settings.keepAwake && !document.hidden && (!!restInterval || (!!top && top.t === "gym"));
+    if (want && !wakeLock && !wakeAsking) {
+      wakeAsking = true;
+      navigator.wakeLock.request("screen").then(function (lock) {
+        wakeAsking = false;
+        wakeLock = lock;
+        lock.addEventListener("release", function () { if (wakeLock === lock) wakeLock = null; });
+        updateWakeLock();       // still wanted? (the sheet may have closed meanwhile)
+      }).catch(function () { wakeAsking = false; });
+    } else if (!want && wakeLock) {
+      wakeLock.release().catch(function () { /* ignore */ });
+      wakeLock = null;
+    }
+  }
+  document.addEventListener("visibilitychange", updateWakeLock);
 
   /* ---------- Backup file (full state: progress + history) ---------- */
 
@@ -1407,6 +1491,10 @@
         return { name: e.variant || (step ? step.name : ""), mult: r.weight, v: r.sets,
           sub: shortDay(e.ts) + (a ? " &middot; " + esc(shortAreaName(a)) + " step " + e.step : "") + " &middot; " + esc(setsWord(r.logged)) };
       }
+      if (e.kind === "gym") {
+        return { name: exName(e.exId), mult: r.weight, v: r.sets,
+          sub: shortDay(e.ts) + " &middot; " + esc(setsWord(r.logged)) + (r.own ? "" : ", helping") };
+      }
       return { name: "Quick gym log", mult: r.weight, v: r.sets,
         sub: shortDay(e.ts) + " &middot; " + r.logged + " " + SET_WORD[r.listed] + (r.logged === 1 ? " set" : " sets") + (r.own ? "" : ", helping") };
     });
@@ -2009,7 +2097,8 @@
       "<h4>" + (plan.length ? "Other skills" : "Skills") + "</h4>" + '<div class="librows">' +
       pickRowHTML('id="pickSkill"', "var(--axis)", "&#129336;", plan.length ? "Another skill" : "Skill session", "Pick one of the six ladders, at your step.") + "</div>" +
       "<h4>Gym</h4>" + '<div class="librows">' +
-      pickRowHTML('id="pickQuick"', "var(--accent)", "&#127947;&#65039;", "Quick gym log", "Sets per muscle group, no exercises. Under a minute.") + "</div>" +
+      pickRowHTML('id="pickGym"', "var(--accent)", "&#127947;&#65039;", "Gym exercise", "Reps and kg, set by set, with a suggestion for each.") +
+      pickRowHTML('id="pickQuick"', "var(--accent)", "&#9889;", "Quick gym log", "Only the sets per muscle group, no exercises.") + "</div>" +
       "</div>";
   }
 
@@ -2095,6 +2184,33 @@
       row("lo", 0) + row("hi", 1) +
       '<p class="hint" id="volHint" aria-live="polite">' + volHintText() + "</p>";
   }
+  function restSettingsHTML() {
+    var g = state.settings.restGym;
+    var chips = [60, 90, 120, 180, 240].map(function (sec) {
+      return '<button type="button" class="chip' + (g === sec ? " sel" : "") + '" data-restgym="' + sec + '" aria-pressed="' + (g === sec) + '">' + fmtTime(sec) + "</button>";
+    }).join("");
+    return "<h4>Rest timer</h4>" +
+      "<p>Between gym sets. (For skill sessions you pick it on the log form.)</p>" +
+      '<div class="chips" role="group" aria-label="Rest between gym sets">' + chips + "</div>" +
+      '<label class="exchk"><input type="checkbox" id="autoRestChk"' + (state.settings.autoRest ? " checked" : "") + "> Start it when I tick a gym set</label>" +
+      (navigator.wakeLock ? '<label class="exchk"><input type="checkbox" id="keepAwakeChk"' + (state.settings.keepAwake ? " checked" : "") +
+        "> Keep the screen on while an exercise is open or a rest runs</label>" : "");
+  }
+  function wireRestSettings(sheet) {
+    sheet.querySelectorAll("[data-restgym]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        setPref("restGym", Number(b.getAttribute("data-restgym")));
+        saveState();
+        renderSheet();
+        focusIn($("#sheet"), '[data-restgym="' + b.getAttribute("data-restgym") + '"]');
+      });
+    });
+    var ar = $("#autoRestChk", sheet);
+    if (ar) ar.addEventListener("change", function () { setPref("autoRest", ar.checked); saveState(); });
+    var ka = $("#keepAwakeChk", sheet);
+    if (ka) ka.addEventListener("change", function () { setPref("keepAwake", ka.checked); saveState(); updateWakeLock(); });
+  }
+
   function volHintText() {
     var v = state.settings.vol;
     return "Chest, back, shoulders and abs: " + v[0] + "&#8211;" + v[1] + ". Arms and legs: " + v[0] * 2 + "&#8211;" + v[1] * 2 + ".";
@@ -2160,6 +2276,827 @@
     offline: "Settings. Offline: everything still saves on this device.",
     failed: "Settings. Sync needs your attention."
   };
+
+  /* ---------- Gym exercises: picker, the gym sheet, an exercise's sheet ----------
+
+     One log entry per exercise per workout: { kind: "gym", exId, sets:
+     [reps], kg: [weight] }. The first ✓ creates the entry (with a stable
+     id) and every later ✓, un-✓ or edit of a ticked set updates it, so
+     nothing ticked is ever lost if the phone locks or the app is swiped
+     away. Typed values that aren't ticked yet live in a per-device draft
+     (localStorage, never synced) and come back if you reopen the same
+     exercise that day. TRAINING resolves exercises (built-in + your own),
+     finds warm-up sets and suggests the next session. */
+
+  var GYM_DRAFT_KEY = "milo.gymDraft";
+  var gymDraft = null;      // the top gym view's draft: { exId, entryId, date, pick, rows: [{ kg, reps, done, savedKg, savedReps }], note, dirty, shown }
+  var LOAD_UNIT = { ext: "kg", added: "kg added", assist: "kg assist" };
+
+  function exName(exId) {
+    var ex = TRAINING.exercise(exId);
+    return ex ? ex.name : "Unknown exercise";
+  }
+  function exColor(ex) { return ex ? groupColorVar(ex.p) : "var(--axis)"; }
+  function hasKg(ex) { return !ex || ex.load !== "bw"; }
+  function repUnit(ex) { return ex && ex.timed ? "sec" : "reps"; }
+  function fmtW(x) { return fmtKg(x); }
+
+  // "Chest · helps arms, shoulders · dumbbells · kg per hand"
+  function exSubline(ex) {
+    if (!ex) return "";
+    var bits = [groupName(ex.p)];
+    if (ex.s && ex.s.length) bits.push("helps " + ex.s.map(function (g) { return groupName(g).toLowerCase(); }).join(", "));
+    bits.push(EQUIP_NAME[ex.equip] || ex.equip);
+    if (ex.perHand) bits.push("kg per hand");
+    if (ex.load === "assist") bits.push("kg = assistance");
+    if (ex.load === "added") bits.push("kg = added weight");
+    return bits.map(esc).join(" &middot; ");
+  }
+  var EQUIP_NAME = { barbell: "barbell", dumbbell: "dumbbells", machine: "machine", cable: "cable", kettlebell: "kettlebell", bodyweight: "bodyweight", other: "other" };
+
+  // "8, 8, 7 × 60 kg" when one weight, else "8 × 60, 8 × 62.5 kg"; bodyweight: "12, 10, 9 reps".
+  function setsText(ex, sets, kg) {
+    var unit = repUnit(ex);
+    if (!hasKg(ex) || kg.every(function (w) { return !w; })) return sets.join(", ") + " " + unit;
+    var one = kg.every(function (w) { return w === kg[0]; });
+    var suffix = ex && ex.load === "assist" ? " kg assist" : (ex && ex.load === "added" ? " kg added" : " kg");
+    if (one) return sets.join(", ") + (ex && ex.timed ? " sec" : "") + " × " + fmtW(kg[0]) + suffix;
+    return sets.map(function (r, i) { return r + " × " + fmtW(kg[i]); }).join(", ") + suffix;
+  }
+  // A logged gym entry in one line: "3 sets (+1 warm-up): 8, 8, 7 × 60 kg".
+  function gymEntryText(e) {
+    var ex = TRAINING.exercise(e.exId);
+    var work = TRAINING.workingSets(e);
+    var ws = [], wk = [], warm = 0;
+    e.sets.forEach(function (r, i) { if (work[i]) { ws.push(r); wk.push(e.kg[i] || 0); } else if (r > 0) warm++; });
+    if (!ws.length) { ws = e.sets.slice(); wk = e.kg.slice(); warm = 0; }
+    var n = ws.length;
+    return n + (ex && ex.timed ? (n === 1 ? " hold" : " holds") : (n === 1 ? " set" : " sets")) +
+      (warm ? " (+" + warm + " warm-up" + (warm === 1 ? "" : "s") + ")" : "") + ": " + setsText(ex, ws, wk);
+  }
+
+  /* ---- Picker ---- */
+
+  function openGymPick() { pushView({ t: "gympick" }); }
+
+  function recentExercises(n) {
+    var seen = {}, out = [];
+    for (var i = state.log.length - 1; i >= 0 && out.length < n; i--) {
+      var e = state.log[i];
+      if (e.kind !== "gym" || seen[e.exId]) continue;
+      seen[e.exId] = true;
+      var ex = TRAINING.exercise(e.exId);
+      if (ex && !ex.del) out.push(ex);
+    }
+    return out;
+  }
+
+  function exRowHTML(ex) {
+    var last = TRAINING.lastSession(state.log, ex.id, {});
+    var when = last ? dayLabel(last.ts) : "";
+    var sub = last ? (when === "Today" ? "Today" : "Last " + esc(when)) + ": " + esc(setsText(ex, last.sets, last.kg))
+      : esc((EQUIP_NAME[ex.equip] || ex.equip) + " · " + ex.lo + "–" + ex.hi + " " + repUnit(ex));
+    return '<button class="librow exrow" type="button" data-ex="' + esc(ex.id) + '" data-name="' + esc(ex.name.toLowerCase()) + '" style="--area:' + exColor(ex) + '">' +
+      '<span class="libinfo"><span class="libname">' + esc(ex.name) + (ex.custom ? ' <span class="exmine">yours</span>' : "") + "</span>" +
+      '<span class="libsub">' + sub + '</span></span><span class="chev" aria-hidden="true">&#8250;</span></button>';
+  }
+
+  function gymPickPaneHTML() {
+    var all = TRAINING.exerciseList();
+    var recent = recentExercises(6);
+    var sections = MODEL.GROUPS.map(function (g) {
+      var list = all.filter(function (ex) { return ex.p === g; });
+      if (!list.length) return "";
+      return '<div class="exsect"><h4><span class="swatch" style="--area:' + groupColorVar(g) + '"></span>' + esc(groupName(g)) + "</h4>" +
+        '<div class="librows">' + list.map(exRowHTML).join("") + "</div></div>";
+    }).join("");
+    return sheetHead({ title: "Gym exercise", sub: "What did you do?" }) +
+      '<div class="sheet-body logpick gympick">' +
+      '<label class="visually-hidden" for="gymSearch">Find an exercise</label>' +
+      '<input type="search" id="gymSearch" class="exsearch" placeholder="Find an exercise&#8230;" autocomplete="off" autocapitalize="off" spellcheck="false">' +
+      (recent.length ? '<div class="exsect" id="recentSect"><h4>Recent</h4><div class="librows">' + recent.map(exRowHTML).join("") + "</div></div>" : "") +
+      sections +
+      '<p class="empty-line center" id="gymNone" hidden>No exercise with that name.</p>' +
+      '<div class="librows"><button class="librow" type="button" id="newExBtn" style="--area:var(--accent)">' +
+      '<span class="libicon" aria-hidden="true">&#65291;</span><span class="libinfo"><span class="libname">New exercise</span>' +
+      '<span class="libsub">Something that isn&#8217;t in the list.</span></span><span class="chev" aria-hidden="true">&#8250;</span></button></div>' +
+      "</div>";
+  }
+
+  function wireGymPick(sheet) {
+    var box = $("#gymSearch", sheet);
+    function filter() {
+      var q = box.value.trim().toLowerCase();
+      var any = false;
+      sheet.querySelectorAll(".exsect").forEach(function (sec) {
+        var shown = 0;
+        sec.querySelectorAll(".exrow").forEach(function (r) {
+          var hit = !q || r.getAttribute("data-name").indexOf(q) !== -1;
+          r.hidden = !hit;
+          if (hit) shown++;
+        });
+        sec.hidden = !shown || (!!q && sec.id === "recentSect");
+        if (shown && !(q && sec.id === "recentSect")) any = true;
+      });
+      $("#gymNone", sheet).hidden = any;
+    }
+    if (box) box.addEventListener("input", filter);
+    sheet.querySelectorAll(".exrow").forEach(function (b) {
+      b.addEventListener("click", function () { openGym(b.getAttribute("data-ex"), null); });
+    });
+    var nb = $("#newExBtn", sheet);
+    if (nb) nb.addEventListener("click", function () { openExForm(null); });
+  }
+
+  /* ---- The gym sheet ----
+
+     Each gym view carries its own draft (view.g): a sheet opened from an
+     exercise's history on top of today's workout never touches today's
+     rows. gymDraft is the draft of the gym view on top of the stack
+     (renderSheet sets it). Per-device drafts of typed-but-unticked sets are
+     kept per exercise, for today only. */
+
+  // milo.gymDraft = { date: today, byEx: { exId: { entryId, rows: [{ kg, reps }], note } } }
+  function readGymDrafts() {
+    var today = quickDays().today, box = null;
+    try { box = JSON.parse(localStorage.getItem(GYM_DRAFT_KEY) || "null"); } catch (e) { box = null; }
+    if (box && box.exId && !box.byEx) {               // the first release's single slot
+      var one = {}; one[box.exId] = { entryId: box.entryId, rows: box.rows, note: box.note };
+      box = { date: box.date, byEx: one };
+    }
+    if (!box || typeof box !== "object" || box.date !== today || !box.byEx || typeof box.byEx !== "object") box = { date: today, byEx: {} };
+    return box;
+  }
+  function gymDraftFor(exId) {
+    var box = readGymDrafts();
+    return Object.prototype.hasOwnProperty.call(box.byEx, exId) ? box.byEx[exId] : null;
+  }
+  function writeGymDraftSlot(exId, slot) {
+    var box = readGymDrafts();
+    if (slot) box.byEx[exId] = slot; else delete box.byEx[exId];
+    try {
+      if (Object.keys(box.byEx).length) localStorage.setItem(GYM_DRAFT_KEY, JSON.stringify(box));
+      else localStorage.removeItem(GYM_DRAFT_KEY);
+    } catch (e) { /* best effort */ }
+  }
+  // Only what isn't in the log: unticked rows with reps typed, and the note.
+  // Only for today (a past day's edit has nothing to come back to).
+  function saveGymDraft() {
+    var d = gymDraft;
+    if (!d || d.date !== quickDays().today) return;
+    var rows = d.rows.filter(function (r) { return !r.done && r.reps !== ""; })
+      .map(function (r) { return { kg: r.kg, reps: r.reps }; });
+    writeGymDraftSlot(d.exId, rows.length || d.note || d.entryId ? { entryId: d.entryId, rows: rows, note: d.note || "" } : null);
+  }
+
+  function gymSuggestion(exId, excludeId) {
+    try { return TRAINING.suggest(exId, state.log, nowMs(), { exclude: excludeId }); } catch (e) { return null; }
+  }
+
+  function doneRow(ex, kg, reps) {
+    var k = hasKg(ex) ? String(fmtW(kg || 0)) : "", r = String(reps);
+    return { kg: k, reps: r, done: true, savedKg: k, savedReps: r };
+  }
+
+  // This exercise's entry on a day, if there is one (the latest).
+  function gymEntryOn(exId, dateKey, notId) {
+    var found = null;
+    state.log.forEach(function (x) { if (x.kind === "gym" && x.exId === exId && x.id !== notId && dateStr(x.ts) === dateKey) found = x; });
+    return found;
+  }
+
+  // exId: the exercise; editId: an existing entry to edit (from History).
+  function openGym(exId, editId) {
+    var ex = TRAINING.exercise(exId);
+    var k = quickDays();
+    var entry = editId ? entryById(editId) : null;
+    if (editId && (!entry || entry.kind !== "gym")) return;
+    var d = { exId: exId, entryId: null, date: k.today, pick: false, rows: [], note: "", dirty: false };
+    if (entry) {
+      d.entryId = entry.id;
+      d.date = dateStr(entry.ts);
+      d.note = entry.note || "";
+      d.rows = entry.sets.map(function (r, i) { return doneRow(ex, entry.kg[i], r); });
+    } else {
+      // Carry on where you left off today: the ticked sets already in today's
+      // entry for this exercise, then what was typed but not ticked.
+      var draft = gymDraftFor(exId);
+      var cont = draft && draft.entryId ? entryById(draft.entryId) : null;
+      if (!cont || cont.kind !== "gym" || cont.exId !== exId || dateStr(cont.ts) !== k.today) cont = gymEntryOn(exId, k.today, null);
+      if (cont) {
+        d.entryId = cont.id;
+        d.note = cont.note || "";
+        d.rows = cont.sets.map(function (r, i) { return doneRow(ex, cont.kg[i], r); });
+      }
+      if (draft) {
+        (draft.rows || []).forEach(function (r) { d.rows.push({ kg: String(r.kg || ""), reps: String(r.reps || ""), done: false }); });
+        if (draft.note) d.note = draft.note;
+      }
+      // One empty set ready for the next one, at the last weight.
+      if (cont && !d.rows.some(function (r) { return !r.done; })) {
+        d.rows.push({ kg: d.rows.length ? d.rows[d.rows.length - 1].kg : "", reps: "", done: false });
+      }
+    }
+    if (!d.rows.length) {
+      var sg = gymSuggestion(exId, null);
+      var n = sg && sg.sets ? sg.sets : 3;
+      var kg = sg && sg.kg ? String(fmtW(sg.kg)) : "";
+      for (var i = 0; i < n; i++) d.rows.push({ kg: hasKg(ex) ? kg : "", reps: "", done: false });
+    }
+    d.pick = d.date !== k.today && d.date !== k.yesterday;
+    var v = { t: "gym", x: exId, g: d };
+    if (sameView(v, uiStack[uiStack.length - 1])) { renderSheet(); return; }   // a double tap
+    uiStack.push(v);
+    renderSheet();
+  }
+
+  function suggestionHTML(ex, sg) {
+    if (!ex || !sg) return "";
+    var unit = repUnit(ex), t = sg.targets || [];
+    var list = t.length ? t.join(", ") + " " + unit : "";
+    var weighted = hasKg(ex) && sg.kg > 0;
+    var kgTxt = weighted ? fmtW(sg.kg) + (ex.load === "assist" ? " kg assist" : (ex.load === "added" ? " kg added" : " kg")) : "";
+    var text;
+    switch (sg.kind) {
+      case "first":
+        if (ex.timed) text = "First time: " + (sg.sets || 3) + " holds, as long as you can with good form, up to " + ex.hi + " seconds.";
+        else if (ex.load === "ext") text = "First time: pick a weight you could lift about " + (ex.hi + 2) + " times, and do " + (sg.sets || 3) + " sets of " + ex.hi + ".";
+        else if (ex.load === "assist") text = "First time: pick the help that lets you do about " + (ex.hi + 2) + " good reps, and do " + (sg.sets || 3) + " sets of " + ex.hi + ".";
+        else text = "First time: " + (sg.sets || 3) + " sets at bodyweight, as many good reps as you can, up to " + ex.hi + ".";
+        break;
+      case "return":
+        text = weighted ? "It&#8217;s been a while: start lighter at " + kgTxt + ", " + list + "."
+          : "It&#8217;s been a while: ease back in with " + list + ".";
+        break;
+      case "up":
+        text = ex.load === "assist"
+          ? "<b>Less help:</b> " + kgTxt + " for " + list + ". You hit " + ex.hi + " on every set last time."
+          : "<b>Go up:</b> " + kgTxt + " for " + list + ". You hit " + ex.hi + " on every set last time.";
+        break;
+      case "same": text = "<b>Same weight</b> (" + kgTxt + "), one more rep where you can: " + list + "."; break;
+      case "deload": text = "Two sessions short of the goal: " + (ex.load === "assist" ? "more help, " : "drop to ") + kgTxt + " and build back up: " + list + "."; break;
+      case "reps": text = "<b>Beat last time:</b> " + list + (weighted ? " at " + kgTxt : "") + "."; break;
+      case "harder":
+        text = ex.timed ? "Every hold at " + ex.hi + " seconds: time for a harder variation, or add weight."
+          : (ex.load === "added" ? "Every set at " + ex.hi + " " + unit + ": add " + fmtW(ex.inc) + " kg next time."
+            : "Every set at " + ex.hi + " " + unit + ": time for a harder variation, or add weight.");
+        break;
+      default: text = "";
+    }
+    return text ? '<div class="rx gymrx"><span class="rxlabel">Suggested</span><span class="rxgoal">' + text + "</span></div>" : "";
+  }
+
+  function gymPaneHTML() {
+    var d = gymDraft;
+    if (!d) return "";
+    var ex = TRAINING.exercise(d.exId), k = quickDays();
+    var mode = d.pick ? "pick" : (d.date === k.today ? "today" : (d.date === k.yesterday ? "yesterday" : "pick"));
+    d.shown = mode;
+    var chip = function (m, label) {
+      return '<button type="button" class="chip gday' + (mode === m ? " sel" : "") + '" data-day="' + m + '" aria-pressed="' + (mode === m) + '">' + label + "</button>";
+    };
+    var last = TRAINING.lastSession(state.log, d.exId, { exclude: d.entryId, before: dateFromKey(d.date) });
+    // A suggestion is for today's workout; on a past day's entry it would be about the wrong day.
+    var sg = d.date === k.today ? gymSuggestion(d.exId, d.entryId) : null;
+    var targets = sg && sg.targets ? sg.targets : [];
+    var work = gymRowsWorking();
+    var rows = d.rows.map(function (r, i) {
+      var warm = r.reps !== "" && !work[i];
+      return '<li class="gset' + (r.done ? " done" : "") + (warm ? " warm" : "") + '" data-i="' + i + '">' +
+        '<span class="gnum" aria-hidden="true">' + (warm ? "W" : i + 1) + "</span>" +
+        (hasKg(ex)
+          ? '<span class="stepper gkg"><button type="button" class="stepbtn" data-kg="-1" aria-label="Less weight, set ' + (i + 1) + '">&#8722;</button>' +
+            '<input class="stepval kgval" type="text" inputmode="decimal" value="' + esc(r.kg) + '" placeholder="kg" aria-label="Weight in kg, set ' + (i + 1) + '">' +
+            '<button type="button" class="stepbtn" data-kg="1" aria-label="More weight, set ' + (i + 1) + '">&#43;</button></span>'
+          : "") +
+        '<input class="stepval repval" type="number" inputmode="numeric" min="1" max="3600" value="' + esc(r.reps) + '" placeholder="' + (targets[i] != null ? targets[i] : "") + '" aria-label="' + (ex && ex.timed ? "Seconds" : "Reps") + ", set " + (i + 1) + '">' +
+        '<span class="gunit" aria-hidden="true">' + repUnit(ex) + "</span>" +
+        '<button type="button" class="gtick" aria-pressed="' + r.done + '" aria-label="Set ' + (i + 1) + ' done">&#10003;</button>' +
+        '<span class="visually-hidden gwarm">' + (warm ? "(warm-up)" : "") + "</span></li>";
+    }).join("");
+    return sheetHead({
+      title: '<span class="swatch" style="--area:' + exColor(ex) + '"></span>' + esc(exName(d.exId)),
+      sub: exSubline(ex) + (ex ? ' <button class="infobtn exinfo" id="exInfoBtn" type="button" aria-label="About this exercise">&#9432;</button>' : "")
+    }) +
+      '<div class="sheet-body quickpane gympane' + (hasKg(ex) ? "" : " gpane-bw") + '" style="--area:' + exColor(ex) + '">' +
+      '<div class="chips" role="group" aria-label="Day">' + chip("today", "Today") + chip("yesterday", "Yesterday") + chip("pick", "Pick a day") + "</div>" +
+      (mode === "pick" ? '<label class="visually-hidden" for="gymDate">Day you trained</label><input type="date" id="gymDate" class="qdate" value="' + esc(d.date) + '" min="2000-01-01" max="' + k.today + '">' : "") +
+      (last ? '<p class="glast"><b>Last time</b> &middot; ' + esc(dayLabel(last.ts)) + ": " + esc(setsText(ex, last.sets, last.kg)) + "</p>" : "") +
+      suggestionHTML(ex, sg) +
+      '<ol class="gsets" aria-label="Sets">' + rows + "</ol>" +
+      '<p class="hint gtip">Tick &#10003; each set as you finish it: it&#8217;s saved straight away' +
+      (targets.length ? ", and an empty " + repUnit(ex) + " box takes the suggested number" : "") + ".</p>" +
+      '<div class="btnrow"><button class="btn" id="gymAddSet" type="button">&#65291; Add set</button>' +
+      (d.rows.length > 1 ? '<button class="btn" id="gymRemoveSet" type="button">Remove last set</button>' : "") + "</div>" +
+      "<h4>Note (optional)</h4>" +
+      '<textarea id="gymNote" class="lognote" rows="2" maxlength="280" placeholder="Seat height, grip, how it felt">' + esc(d.note || "") + "</textarea>" +
+      (d.entryId ? '<button type="button" class="btn danger wide qdel" id="gymDelete">Delete this exercise from the log</button>' : "") +
+      "</div>" +
+      '<div class="sheet-foot gymfoot"><button type="button" class="btn wide" id="gymDone">Done</button>' +
+      '<button type="button" class="btn primary wide" id="gymNext">Save &#8594; next exercise</button></div>';
+  }
+
+  // Which rows are working sets (the rest are warm-ups), from what's typed.
+  function gymRowsWorking() {
+    var d = gymDraft, sets = [], kg = [], idx = [];
+    d.rows.forEach(function (r, i) {
+      var reps = Math.round(Number(r.reps));
+      if (r.reps === "" || !isFinite(reps) || reps <= 0) return;
+      sets.push(reps); kg.push(parseKgInput(r.kg)); idx.push(i);
+    });
+    var flags = sets.length ? TRAINING.workingSets({ kind: "gym", exId: d.exId, sets: sets, kg: kg }) : [];
+    var out = d.rows.map(function () { return true; });
+    idx.forEach(function (i, j) { out[i] = !!flags[j]; });
+    return out;
+  }
+  // The warm-up marks, redrawn in place (no re-render: that would swallow the next tap).
+  function paintGymRows(sheet) {
+    var work = gymRowsWorking();
+    sheet.querySelectorAll(".gset").forEach(function (li) {
+      var i = Number(li.getAttribute("data-i")), r = gymDraft.rows[i];
+      if (!r) return;
+      var warm = r.reps !== "" && !work[i];
+      li.classList.toggle("warm", warm);
+      $(".gnum", li).textContent = warm ? "W" : String(i + 1);
+      $(".gwarm", li).textContent = warm ? "(warm-up)" : "";
+    });
+  }
+
+  function parseKgInput(v) {
+    var n = MODEL.parseKg(String(v == null ? "" : v));
+    return isFinite(n) && n > 0 ? MODEL.roundKg(n) : 0;
+  }
+  function kgTypedBad(v) { return String(v).trim() !== "" && !isFinite(MODEL.parseKg(String(v))); }
+
+  function readGymInputs(sheet) {
+    if (!gymDraft) return;
+    sheet.querySelectorAll(".gset").forEach(function (li) {
+      var r = gymDraft.rows[Number(li.getAttribute("data-i"))];
+      if (!r) return;
+      var kg = $(".kgval", li), reps = $(".repval", li);
+      if (kg) r.kg = kg.value.trim();
+      if (reps) r.reps = reps.value.trim();
+    });
+    var note = $("#gymNote", sheet);
+    if (note) gymDraft.note = note.value;
+  }
+
+  function gymEntryTs() {
+    var d = gymDraft, e = d.entryId ? entryById(d.entryId) : null;
+    if (e && dateStr(e.ts) === d.date) return e.ts;          // same day: keep the time
+    return quickTs(d.date);
+  }
+
+  // Writes the ticked sets to the log: creates the entry at the first ✓,
+  // updates it after, removes it when nothing is ticked any more. Nothing is
+  // written (or re-stamped) when the entry wouldn't change — a stamp without
+  // a change could undo an edit made meanwhile on another device.
+  function commitGym() {
+    var d = gymDraft, sets = [], kg = [];
+    d.rows.forEach(function (r) {
+      if (!r.done) return;
+      var reps = Math.round(Number(r.reps));
+      sets.push(isFinite(reps) && reps >= 0 ? Math.min(3600, reps) : 0);
+      kg.push(parseKgInput(r.kg));
+    });
+    var existing = d.entryId ? entryById(d.entryId) : null;
+    if (d.entryId && !existing && !d.dirty) { d.entryId = null; return true; }   // deleted elsewhere; not ours to bring back
+    if (!sets.length) {
+      if (existing) { deleteLogEntry(existing.id); d.entryId = null; refresh(); }
+      saveGymDraft();
+      return true;
+    }
+    var raw = { id: d.entryId || genId(), ts: gymEntryTs(), kind: "gym", exId: d.exId, sets: sets, kg: kg,
+      note: String(d.note || "").slice(0, 280), mts: existing ? existing.mts : 0 };
+    var entry = MODEL.sanitizeLogEntry(raw);
+    if (!entry) { toast("Couldn't save that set"); return false; }
+    // What was saved, back in the boxes (22.3 is stored as 22.25).
+    var j = 0, ex = TRAINING.exercise(d.exId);
+    d.rows.forEach(function (r) {
+      if (!r.done) return;
+      r.kg = hasKg(ex) ? String(fmtW(entry.kg[j])) : "";
+      r.reps = String(entry.sets[j]);
+      r.savedKg = r.kg; r.savedReps = r.reps;
+      j++;
+    });
+    if (existing && JSON.stringify(entry) === JSON.stringify(existing)) { saveGymDraft(); return true; }
+    entry.mts = MODEL.stamp(existing ? existing.mts : 0);
+    if (existing) state.log[state.log.indexOf(existing)] = entry;
+    else state.log.push(entry);
+    d.entryId = entry.id;
+    MODEL.sortLog(state.log);
+    var ok = saveState();
+    saveGymDraft();
+    refresh();
+    if (!ok) toast(notSavedMsg());
+    return ok;
+  }
+
+  // A day chosen for a sheet that has no entry yet: if that day already has
+  // this exercise, carry on with that entry rather than start a second one.
+  function adoptDayEntry() {
+    var d = gymDraft;
+    if (d.entryId) return;
+    var e = gymEntryOn(d.exId, d.date, null);
+    if (!e) return;
+    var ex = TRAINING.exercise(d.exId);
+    d.entryId = e.id;
+    d.rows = e.sets.map(function (r, i) { return doneRow(ex, e.kg[i], r); }).concat(d.rows.filter(function (r) { return !r.done; }));
+    if (!d.note) d.note = e.note || "";
+  }
+
+  // Leaving by ✕, ‹, a swipe or Escape: whatever was edited is kept.
+  function beforeLeaveGym() {
+    var top = uiStack[uiStack.length - 1];
+    if (!top || top.t !== "gym" || !gymDraft) return;
+    readGymInputs($("#sheet"));
+    var changed = gymDraft.rows.some(function (r) { return r.done && (r.kg !== r.savedKg || r.reps !== r.savedReps); });
+    if (changed && gymRowsValid(true)) commitGym();
+    saveGymDraft();
+  }
+
+  // Ticked rows must stay loggable: reps at least 1, a readable weight.
+  // Bad edits go back to what was saved. quiet: no toast.
+  function gymRowsValid(quiet) {
+    var ex = TRAINING.exercise(gymDraft.exId), ok = true;
+    gymDraft.rows.forEach(function (r) {
+      if (!r.done) return;
+      var reps = Math.round(Number(r.reps));
+      var bad = r.reps === "" || !isFinite(reps) || reps < 1 || kgTypedBad(r.kg) || (hasKg(ex) && ex && ex.load === "ext" && r.kg === "");
+      if (bad) { r.kg = r.savedKg; r.reps = r.savedReps; ok = false; }
+    });
+    if (!ok && !quiet) toast("A ticked set needs its " + repUnit(ex) + " (at least 1) and a weight that is a number — put back as saved");
+    return ok;
+  }
+
+  function wireGym(sheet) {
+    var d = gymDraft;
+    if (!d) return;
+    var ex = TRAINING.exercise(d.exId);
+    var inc = ex && ex.inc ? ex.inc : 2.5;
+
+    sheet.querySelectorAll(".gday").forEach(function (b) {
+      b.addEventListener("click", function () {
+        readGymInputs(sheet);
+        var k = quickDays(), m = b.getAttribute("data-day"), was = d.date;
+        if (m === "today") { d.date = k.today; d.pick = false; }
+        else if (m === "yesterday") { d.date = k.yesterday; d.pick = false; }
+        else d.pick = true;                 // the date box shows; nothing moves until a date is chosen
+        if (d.date !== was) {
+          d.dirty = true;
+          if (d.entryId) commitGym(); else adoptDayEntry();
+        }
+        renderSheet();
+        focusIn($("#sheet"), '.gday[data-day="' + m + '"]');
+      });
+    });
+    var di = $("#gymDate", sheet);
+    if (di) di.addEventListener("change", function () {
+      var v = di.value, today = quickDays().today;
+      if (!DATE_KEY_RE.test(v) || v < "2000-01-01") return;
+      if (v > today) { toast("That day hasn't happened yet"); di.value = d.date; return; }
+      if (v === d.date) return;
+      readGymInputs(sheet);
+      d.date = v;
+      d.dirty = true;
+      if (d.entryId) commitGym(); else { adoptDayEntry(); renderSheet(); }
+    });
+
+    sheet.querySelectorAll(".gset").forEach(function (li) {
+      var i = Number(li.getAttribute("data-i")), r = d.rows[i];
+      var kgIn = $(".kgval", li), repIn = $(".repval", li), tick = $(".gtick", li);
+      li.querySelectorAll("[data-kg]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          readGymInputs(sheet);
+          var cur = parseKgInput(r.kg);
+          var next = Math.max(0, MODEL.roundKg(cur + Number(b.getAttribute("data-kg")) * inc));
+          r.kg = String(fmtW(next));
+          kgIn.value = r.kg;
+          if (r.done) { d.dirty = true; commitGym(); } else saveGymDraft();
+          paintGymRows(sheet);
+        });
+      });
+      [kgIn, repIn].forEach(function (inp) {
+        if (!inp) return;
+        inp.addEventListener("change", function () {
+          readGymInputs(sheet);
+          if (r.done) {
+            if (gymRowsValid(false)) { d.dirty = true; commitGym(); }
+            if (kgIn) kgIn.value = r.kg;
+            if (repIn) repIn.value = r.reps;
+          } else saveGymDraft();
+          paintGymRows(sheet);
+        });
+      });
+      tick.addEventListener("click", function () {
+        readGymInputs(sheet);
+        if (!r.done) {
+          if (r.reps === "" && repIn && repIn.placeholder !== "") r.reps = repIn.placeholder;
+          var reps = Math.round(Number(r.reps));
+          if (r.reps === "" || !isFinite(reps) || reps < 1) { toast("Enter the " + repUnit(ex) + " first"); if (repIn) repIn.focus(); return; }
+          if (kgTypedBad(r.kg)) { toast("That weight isn't a number"); if (kgIn) kgIn.focus(); return; }
+          if (hasKg(ex) && r.kg === "" && ex && ex.load === "ext") { toast("Enter the weight first"); if (kgIn) kgIn.focus(); return; }
+          r.done = true;
+          d.dirty = true;
+          var ok = commitGym();
+          if (ok && state.settings.autoRest && !readOnly) startRest(state.settings.restGym, { gym: true });
+        } else {
+          r.done = false;
+          d.dirty = true;
+          commitGym();
+        }
+        renderSheet();
+        focusIn($("#sheet"), '.gset[data-i="' + i + '"] .gtick');
+      });
+    });
+
+    var add = $("#gymAddSet", sheet);
+    if (add) add.addEventListener("click", function () {
+      readGymInputs(sheet);
+      var lastRow = d.rows[d.rows.length - 1];
+      if (d.rows.length >= 30) { toast("That's the most sets one entry can hold"); return; }
+      d.rows.push({ kg: lastRow ? lastRow.kg : "", reps: "", done: false });
+      saveGymDraft();
+      renderSheet();
+      focusIn($("#sheet"), '.gset[data-i="' + (d.rows.length - 1) + '"] .repval');
+    });
+    var rem = $("#gymRemoveSet", sheet);
+    if (rem) rem.addEventListener("click", function () {
+      readGymInputs(sheet);
+      var lastRow = d.rows.pop();
+      if (lastRow && lastRow.done) { d.dirty = true; commitGym(); } else saveGymDraft();
+      renderSheet();
+      focusIn($("#sheet"), d.rows.length > 1 ? "#gymRemoveSet" : "#gymAddSet");
+    });
+    var note = $("#gymNote", sheet);
+    if (note) note.addEventListener("change", function () {
+      d.note = note.value;
+      if (d.entryId) { d.dirty = true; commitGym(); } else saveGymDraft();
+    });
+    var info = $("#exInfoBtn", sheet);
+    if (info) info.addEventListener("click", function () { readGymInputs(sheet); saveGymDraft(); pushView({ t: "exercise", x: d.exId }); });
+    var del = $("#gymDelete", sheet);
+    if (del) del.addEventListener("click", function () {
+      if (!confirm("Delete this exercise from the log? Its ticked sets go too.")) return;
+      deleteLogEntry(d.entryId);
+      if (d.date === quickDays().today) writeGymDraftSlot(d.exId, null);
+      gymDraft = null;
+      refresh();
+      leaveGym(false);
+      toast(storageOk && !readOnly ? "Deleted" : notSavedMsg());
+    });
+    $("#gymDone", sheet).addEventListener("click", function () { finishGym(false); });
+    $("#gymNext", sheet).addEventListener("click", function () { finishGym(true); });
+  }
+
+  // Done / Save → next. Ticked sets are already saved; typed-but-unticked
+  // ones stay as today's draft for this exercise (you're asked first).
+  function finishGym(next) {
+    var sheet = $("#sheet");
+    readGymInputs(sheet);
+    var d = gymDraft;
+    var typed = d.rows.some(function (r) { return !r.done && r.reps !== ""; });
+    if (typed) {
+      var keep = d.date === quickDays().today
+        ? confirm("Some sets have numbers but aren't ticked, so they aren't logged. Keep them for when you reopen this exercise today?\n\nOK = keep · Cancel = go back to the sheet")
+        : confirm("Some sets have numbers but aren't ticked, so they won't be logged. Leave anyway?");
+      if (!keep) return;
+    }
+    if (gymRowsValid(false) && d.dirty) commitGym();
+    saveGymDraft();
+    var logged = !!d.entryId;
+    gymDraft = null;
+    leaveGym(next);
+    if (logged && d.dirty) toast(storageOk && !readOnly ? exName(d.exId) + " saved ✓" : notSavedMsg());
+  }
+
+  // Close the gym sheet (and the pickers under it); with next, land on the
+  // exercise picker for the next one.
+  function leaveGym(next) {
+    uiStack.pop();
+    while (uiStack.length && /^(logpick|logskill|gympick)$/.test(uiStack[uiStack.length - 1].t)) uiStack.pop();
+    if (next) uiStack.push({ t: "gympick" });
+    renderSheet();
+  }
+
+  /* ---- One exercise: numbers, its settings, its history ---- */
+
+  function exercisePaneHTML(exId) {
+    var ex = TRAINING.exercise(exId);
+    if (!ex) return "";
+    var sessions = TRAINING.sessionsFor(state.log, exId, {});
+    var best = TRAINING.best(state.log, exId);
+    var unit = repUnit(ex);
+    var numbers = sessions.length
+      ? '<div class="stdtable">' +
+        '<div class="stdrow"><span class="lb">Sessions</span><strong>' + sessions.length + "</strong></div>" +
+        (best ? '<div class="stdrow"><span class="lb">Best set</span><strong>' + esc(best.kg ? best.reps + (ex.timed ? " sec" : "") + " \u00d7 " + fmtW(best.kg) + (ex.load === "assist" ? " kg assist" : (ex.load === "added" ? " kg added" : " kg")) : best.reps + " " + unit) + "</strong></div>" : "") +
+        (best && best.e1rm ? '<div class="stdrow"><span class="lb">Estimated 1-rep max</span><strong>' + esc(fmtW(Math.round(best.e1rm * 2) / 2)) + " kg</strong></div>" : "") +
+        "</div>"
+      : '<p class="empty-line">Not logged yet.</p>';
+    var hist = sessions.slice(0, 12).map(function (e) {
+      return '<button class="librow" type="button" data-edit="' + esc(e.id) + '" style="--area:' + exColor(ex) + '">' +
+        '<span class="libinfo"><span class="libname">' + esc(dayLabel(e.ts)) + "</span>" +
+        '<span class="libsub">' + esc(gymEntryText(e)) + '</span></span><span class="chev" aria-hidden="true">&#8250;</span></button>';
+    }).join("");
+    var stepper = function (id, label, val, min, max, step) {
+      return '<div class="volrow"><span class="vlab" id="' + id + 'L">' + label + "</span>" +
+        '<span class="stepper"><button type="button" class="stepbtn" data-ex-step="' + id + '" data-dir="-1" aria-label="Lower ' + label.toLowerCase() + '">&#8722;</button>' +
+        '<input class="stepval" type="text" inputmode="decimal" id="' + id + '" value="' + esc(String(val)) + '" data-min="' + min + '" data-max="' + max + '" data-step="' + step + '" aria-labelledby="' + id + 'L">' +
+        '<button type="button" class="stepbtn" data-ex-step="' + id + '" data-dir="1" aria-label="Raise ' + label.toLowerCase() + '">&#43;</button></span></div>';
+    };
+    return sheetHead({ title: '<span class="swatch" style="--area:' + exColor(ex) + '"></span>' + esc(ex.name), sub: exSubline(ex) }) +
+      '<div class="sheet-body exsheet" style="--area:' + exColor(ex) + '">' +
+      "<h4>Your numbers</h4>" + numbers +
+      "<h4>For this exercise</h4>" +
+      "<p>The suggestions aim for " + ex.lo + "&#8211;" + ex.hi + " " + unit + " a set" + (hasKg(ex) ? ", and go up " + fmtW(ex.inc) + " kg at a time" : "") + ". Change them if your gym or your body say otherwise.</p>" +
+      stepper("exLo", "Fewest " + unit, ex.lo, 1, 600, 1) +
+      stepper("exHi", "Most " + unit, ex.hi, 1, 600, 1) +
+      (hasKg(ex) ? stepper("exInc", "Weight step (kg)", fmtW(ex.inc), 0.25, 50, 0.25) : "") +
+      '<label class="vlab exnotel" for="exNote">Setup note</label>' +
+      '<input type="text" id="exNote" class="exnote" maxlength="80" value="' + esc(ex.note || "") + '" placeholder="Seat 4, pin 7, narrow grip&#8230;">' +
+      (hist ? "<h4>History</h4>" + '<div class="librows">' + hist + "</div>" : "") +
+      (ex.custom ? '<div class="btnrow"><button class="btn" id="exEditBtn" type="button">Edit this exercise</button>' +
+        '<button class="btn danger" id="exDelBtn" type="button">Remove from the list</button></div>' : "") +
+      "</div>";
+  }
+
+  // Your own values for an exercise: an override record for a built-in, or
+  // the custom record itself. Stamped, so they sync like everything else.
+  function saveExerciseField(exId, patch) {
+    var ex = TRAINING.exercise(exId);
+    if (!ex) return false;
+    var cur = null;
+    state.exercises.forEach(function (r) { if (r.id === exId) cur = r; });
+    var rec = ex.custom ? Object.assign({}, cur) : Object.assign({ id: exId, inc: null, lo: null, hi: null, note: "" }, cur || {});
+    Object.keys(patch).forEach(function (k) { rec[k] = patch[k]; });
+    rec.mts = MODEL.stamp(cur ? cur.mts : 0);
+    var clean = MODEL.sanitizeExercise(rec);
+    if (!clean) return false;
+    state.exercises = state.exercises.filter(function (r) { return r.id !== exId; }).concat([clean]);
+    state.exercises.sort(function (a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+    TRAINING.useExercises(state.exercises);
+    var ok = saveState();
+    refresh();
+    if (!ok) toast(notSavedMsg());
+    return ok;
+  }
+
+  function wireExercise(sheet, exId) {
+    var ex = TRAINING.exercise(exId);
+    if (!ex) return;
+    function commitRange() {
+      var lo = Math.round(Number($("#exLo", sheet).value)), hi = Math.round(Number($("#exHi", sheet).value));
+      if (!(lo >= 1 && lo <= 600 && hi >= 1 && hi <= 600)) { toast("Use numbers from 1 to 600"); renderSheet(); return; }
+      if (hi < lo) { toast("The fewest can't be more than the most"); renderSheet(); return; }
+      saveExerciseField(exId, { lo: lo, hi: hi });
+      renderSheet();
+    }
+    function commitInc() {
+      var n = MODEL.parseKg($("#exInc", sheet).value);
+      if (!(n >= 0.25 && n <= 50)) { toast("Pick a step between 0.25 and 50 kg"); renderSheet(); return; }
+      saveExerciseField(exId, { inc: MODEL.roundKg(n) });
+      renderSheet();
+    }
+    sheet.querySelectorAll("[data-ex-step]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var inp = $("#" + b.getAttribute("data-ex-step"), sheet);
+        var step = Number(inp.getAttribute("data-step")), v = MODEL.parseKg(inp.value);
+        v = Math.min(Number(inp.getAttribute("data-max")), Math.max(Number(inp.getAttribute("data-min")), (isFinite(v) ? v : 0) + Number(b.getAttribute("data-dir")) * step));
+        inp.value = String(fmtW(v));
+        if (inp.id === "exInc") commitInc(); else commitRange();
+        focusIn($("#sheet"), '[data-ex-step="' + b.getAttribute("data-ex-step") + '"][data-dir="' + b.getAttribute("data-dir") + '"]');
+      });
+    });
+    ["exLo", "exHi"].forEach(function (id) { var i = $("#" + id, sheet); if (i) i.addEventListener("change", commitRange); });
+    var incIn = $("#exInc", sheet);
+    if (incIn) incIn.addEventListener("change", commitInc);
+    var noteIn = $("#exNote", sheet);
+    if (noteIn) noteIn.addEventListener("change", function () { saveExerciseField(exId, { note: noteIn.value.slice(0, 80) }); });
+    sheet.querySelectorAll("[data-edit]").forEach(function (b) {
+      b.addEventListener("click", function () { openGym(exId, b.getAttribute("data-edit")); });
+    });
+    var ed = $("#exEditBtn", sheet);
+    if (ed) ed.addEventListener("click", function () { openExForm(exId); });
+    var dl = $("#exDelBtn", sheet);
+    if (dl) dl.addEventListener("click", function () {
+      if (!confirm("Remove " + ex.name + " from the exercise list? What you logged stays in your history.")) return;
+      saveExerciseField(exId, { del: true });
+      while (uiStack.length && /^(exercise|gym)$/.test(uiStack[uiStack.length - 1].t)) uiStack.pop();
+      renderSheet();
+      toast("Removed from the list");
+    });
+  }
+
+  /* ---- Your own exercise ---- */
+
+  var exFormDraft = null;
+  var LOAD_TYPES = [
+    ["ext", "Weights", "A barbell, dumbbells, a machine or a cable"],
+    ["added", "Bodyweight + weight", "Like dips: kg is what you add"],
+    ["assist", "Assisted", "A machine that helps: less kg is harder"],
+    ["bw", "Bodyweight only", "No weight: count reps"],
+    ["timed", "Timed hold", "Like a plank: count seconds"]
+  ];
+
+  function openExForm(exId) {
+    var ex = exId ? TRAINING.exercise(exId) : null;
+    exFormDraft = ex
+      ? { id: ex.id, name: ex.name, group: ex.p, sec: ex.s.slice(), equip: ex.equip, type: ex.timed ? "timed" : ex.load, perHand: ex.perHand, lo: ex.lo, hi: ex.hi }
+      : { id: null, name: "", group: "", sec: [], equip: "dumbbell", type: "ext", perHand: false, lo: 8, hi: 12 };
+    pushView({ t: "exform", x: exId || undefined });
+  }
+
+  function exFormPaneHTML() {
+    var f = exFormDraft;
+    if (!f) return "";
+    var chips = function (name, list, sel, attr) {
+      return '<div class="chips" role="group" aria-label="' + name + '">' + list.map(function (it) {
+        var on = Array.isArray(sel) ? sel.indexOf(it[0]) !== -1 : sel === it[0];
+        return '<button type="button" class="chip' + (on ? " sel" : "") + '" ' + attr + '="' + it[0] + '" aria-pressed="' + on + '">' + esc(it[1]) + "</button>";
+      }).join("") + "</div>";
+    };
+    var groups = MODEL.GROUPS.map(function (g) { return [g, groupName(g)]; });
+    var equips = ["dumbbell", "barbell", "machine", "cable", "kettlebell", "bodyweight", "other"].map(function (e) { return [e, EQUIP_NAME[e]]; });
+    var typeInfo = LOAD_TYPES.filter(function (t) { return t[0] === f.type; })[0];
+    return sheetHead({ title: f.id ? "Edit exercise" : "New exercise", sub: "Yours: it syncs with your other devices" }) +
+      '<div class="sheet-body exform" style="--area:var(--accent)">' +
+      '<label class="vlab" for="exName">Name</label>' +
+      '<input type="text" id="exName" class="exnote" maxlength="40" value="' + esc(f.name) + '" placeholder="e.g. Chest-supported row" autocomplete="off">' +
+      "<h4>Main muscle group</h4>" + chips("Main muscle group", groups, f.group, "data-fg") +
+      "<h4>Also works (counts &frac12;)</h4>" + chips("Also works", groups.filter(function (g) { return g[0] !== f.group; }), f.sec, "data-fs") +
+      "<h4>Equipment</h4>" + chips("Equipment", equips, f.equip, "data-fe") +
+      "<h4>Type</h4>" + chips("Type", LOAD_TYPES.map(function (t) { return [t[0], t[1]]; }), f.type, "data-ft") +
+      (typeInfo ? '<p class="hint">' + esc(typeInfo[2]) + ".</p>" : "") +
+      ((f.equip === "dumbbell" || f.equip === "kettlebell") && (f.type === "ext" || f.type === "added")
+        ? '<label class="exchk"><input type="checkbox" id="exPerHand"' + (f.perHand ? " checked" : "") + "> One weight in each hand (log kg per hand)</label>" : "") +
+      "<h4>" + (f.type === "timed" ? "Seconds per hold" : "Reps per set") + "</h4>" +
+      '<div class="volrow"><span class="vlab" id="fLoL">Fewest</span><input class="stepval" type="number" inputmode="numeric" id="fLo" min="1" max="600" value="' + f.lo + '" aria-labelledby="fLoL"></div>' +
+      '<div class="volrow"><span class="vlab" id="fHiL">Most</span><input class="stepval" type="number" inputmode="numeric" id="fHi" min="1" max="600" value="' + f.hi + '" aria-labelledby="fHiL"></div>' +
+      "</div>" +
+      '<div class="sheet-foot"><button type="button" class="btn primary wide" id="exSave">' + (f.id ? "Save changes" : "Add and log it") + "</button></div>";
+  }
+
+  function wireExForm(sheet) {
+    var f = exFormDraft;
+    if (!f) return;
+    function read() {
+      f.name = $("#exName", sheet).value;
+      var lo = Math.round(Number($("#fLo", sheet).value)), hi = Math.round(Number($("#fHi", sheet).value));
+      if (isFinite(lo)) f.lo = lo;
+      if (isFinite(hi)) f.hi = hi;
+      var ph = $("#exPerHand", sheet);
+      if (ph) f.perHand = ph.checked;
+    }
+    function pick(attr, fn) {
+      sheet.querySelectorAll("[" + attr + "]").forEach(function (b) {
+        b.addEventListener("click", function () { read(); fn(b.getAttribute(attr)); renderSheet(); });
+      });
+    }
+    pick("data-fg", function (g) { f.group = g; f.sec = f.sec.filter(function (x) { return x !== g; }); });
+    pick("data-fs", function (g) {
+      var i = f.sec.indexOf(g);
+      if (i !== -1) f.sec.splice(i, 1);
+      else if (f.sec.length < 3) f.sec.push(g);
+      else toast("Three at most");
+    });
+    pick("data-fe", function (e) { f.equip = e; });
+    pick("data-ft", function (t) {
+      f.type = t;
+      if (t === "timed" && f.hi < 20) { f.lo = 20; f.hi = 60; }
+      if (t !== "timed" && f.lo >= 20 && f.hi >= 60) { f.lo = 8; f.hi = 12; }
+    });
+    $("#exSave", sheet).addEventListener("click", function () {
+      read();
+      var name = f.name.replace(/\s+/g, " ").trim();
+      if (!name) { toast("Give it a name"); $("#exName", sheet).focus(); return; }
+      if (!f.group) { toast("Pick its main muscle group"); return; }
+      if (!(f.lo >= 1 && f.lo <= 600 && f.hi >= 1 && f.hi <= 600)) { toast("Use numbers from 1 to 600"); return; }
+      if (f.hi < f.lo) { toast("The fewest can't be more than the most"); return; }
+      var id = f.id || ("x_" + genId());
+      var prev = null;
+      state.exercises.forEach(function (r) { if (r.id === id) prev = r; });
+      var timed = f.type === "timed";
+      var rec = MODEL.sanitizeExercise({
+        id: id, name: name, group: f.group, sec: f.sec, equip: f.equip,
+        load: timed ? "bw" : f.type, timed: timed,
+        perHand: !!f.perHand && (f.equip === "dumbbell" || f.equip === "kettlebell") && (f.type === "ext" || f.type === "added"),
+        inc: prev && prev.equip === f.equip ? prev.inc : undefined,     // a step you set survives an edit
+        lo: f.lo, hi: f.hi, note: prev ? prev.note : "", del: false, mts: MODEL.stamp(prev ? prev.mts : 0)
+      });
+      if (!rec) { toast("Couldn't save that exercise"); return; }
+      state.exercises = state.exercises.filter(function (r) { return r.id !== id; }).concat([rec]);
+      state.exercises.sort(function (a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+      TRAINING.useExercises(state.exercises);
+      var ok = saveState();
+      refresh();
+      exFormDraft = null;
+      uiStack.pop();
+      if (!f.id) openGym(id, null);
+      else renderSheet();
+      toast(ok ? (f.id ? "Saved ✓" : name + " added ✓") : notSavedMsg());
+    });
+  }
 
   /* ---------- Sheet navigation (in-app stack, no browser history) ---------- */
 
@@ -2229,6 +3166,7 @@
     state.log.forEach(function (x) { if (x.id === id) e = x; });
     if (!e) return;
     if (e.kind === "quick") { openQuick(id); return; }
+    if (e.kind === "gym") { openGym(e.exId, id); return; }
     if (e.kind) { pushView({ t: "entry", x: id }); return; }
     var ai = areaIndexById(e.areaId);
     logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id, variant: e.variant || "" };
@@ -2305,12 +3243,14 @@
 
   function goBack() {
     if (!uiStack.length) return;
+    beforeLeaveGym();
     uiStack.pop();
     renderSheet();
   }
 
   function closeAll() {
     if (!uiStack.length) return;
+    beforeLeaveGym();
     uiStack.length = 0;
     renderSheet();
   }
@@ -2336,6 +3276,10 @@
       case "hinfo": return "Workouts";
       case "milestones": return "Milestones";
       case "entry": return "Entry";
+      case "gympick": return "Exercises";
+      case "gym": return exName(v.x);
+      case "exercise": return exName(v.x);
+      case "exform": return v.x ? "Edit exercise" : "New exercise";
       case "settings": return "Settings";
       default: return "Back";
     }
@@ -2389,6 +3333,7 @@
   function restoreFocus(el, key) {
     var target = el && document.contains(el) ? el : null;
     if (!target && key && currentTab) target = $("#pane-" + currentTab + " " + key) || null;
+    if (!target && uiStack.length) target = $("#sheetTitle");     // behind a sheet everything is out of reach
     if (!target) target = $("#tabTitle");
     try { target.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
@@ -2415,6 +3360,8 @@
       hideTimer = setTimeout(function () {
         if (!uiStack.length) { sheet.hidden = true; sheet.innerHTML = ""; sheet.className = ""; }
       }, 280);
+      updateWakeLock();
+      retryDeferredSync();
       if (sheetOpener || sheetOpenerKey) restoreFocus(sheetOpener, sheetOpenerKey);
       sheetOpener = null; sheetOpenerKey = "";
       return;
@@ -2453,6 +3400,10 @@
     else if (view.t === "hinfo") sheet.innerHTML = hinfoPaneHTML();
     else if (view.t === "milestones") sheet.innerHTML = milestonesPaneHTML();
     else if (view.t === "entry" && entryById(view.x)) sheet.innerHTML = entryPaneHTML(entryById(view.x));
+    else if (view.t === "gympick") sheet.innerHTML = gymPickPaneHTML();
+    else if (view.t === "gym" && view.g) { gymDraft = view.g; sheet.innerHTML = gymPaneHTML(); }
+    else if (view.t === "exercise" && TRAINING.exercise(view.x)) sheet.innerHTML = exercisePaneHTML(view.x);
+    else if (view.t === "exform" && exFormDraft) sheet.innerHTML = exFormPaneHTML();
     else if (view.t === "settings") sheet.innerHTML = settingsPaneHTML();
     else {
       // A view this version doesn't know (or one whose data has gone): drop it.
@@ -2474,6 +3425,8 @@
       if (title) { try { title.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
     }
     lastViewKey = viewKey;
+    updateWakeLock();
+    retryDeferredSync();
   }
 
   /* ---------- Area pane (step list) ---------- */
@@ -2847,9 +3800,10 @@
       name = ico(a.icon) + esc(e.variant || step.name);
       detail = esc(shortAreaName(a) + " step " + e.step + " \u00b7 " + setsSummary(e, step));
     } else if (e.kind === "gym") {
-      color = "var(--axis)";
-      name = "&#127947;&#65039; " + esc(e.exId);
-      detail = esc(e.sets.map(function (r, i) { return r + (e.kg[i] ? " × " + fmtKg(e.kg[i]) + " kg" : ""); }).join(", "));
+      var gx = TRAINING.exercise(e.exId);
+      color = exColor(gx);
+      name = ico("&#127947;&#65039;") + esc(gx ? gx.name : "Unknown exercise");
+      detail = esc(gymEntryText(e));
     } else if (e.kind === "quick") {
       // "13 sets: Chest 4, Back 3, Arms 6" (commas, so the " · note" after it
       // stays apart), swatch in the biggest group's colour.
@@ -3024,6 +3978,7 @@
       '<div class="chips">' + routineChips + "</div>" +
       (routineOn() ? '<div class="routine-preview">' + routinePreviewHTML() + "</div>" : "") +
       volTargetsHTML() +
+      restSettingsHTML() +
       syncSectionHTML() +
       ghostSectionHTML() +
       "<h4>Backup</h4>" +
@@ -3294,6 +4249,8 @@
       });
       var ps = $("#pickSkill", sheet);
       if (ps) ps.addEventListener("click", function () { pushView({ t: "logskill" }); });
+      var pg = $("#pickGym", sheet);
+      if (pg) pg.addEventListener("click", openGymPick);
       var pq = $("#pickQuick", sheet);
       if (pq) pq.addEventListener("click", function () { openQuick(null); });
     }
@@ -3305,6 +4262,11 @@
       var gl = $("#groupLogBtn", sheet);
       if (gl) gl.addEventListener("click", function () { openQuick(null, view.x); });
     }
+
+    if (view.t === "gympick") wireGymPick(sheet);
+    if (view.t === "gym") wireGym(sheet);
+    if (view.t === "exercise") wireExercise(sheet, view.x);
+    if (view.t === "exform") wireExForm(sheet);
 
     if (view.t === "entry") {
       var de = $("#deleteEntry", sheet);
@@ -3329,6 +4291,7 @@
     if (view.t === "settings") {
       wireSyncSection(sheet);
       wireVolTargets(sheet);
+      wireRestSettings(sheet);
 
       var ghostReset = $("#ghostResetBtn", sheet);
       if (ghostReset) ghostReset.addEventListener("click", function () {
@@ -3453,7 +4416,9 @@
   });
   $("#logTab").addEventListener("click", openLogPick);
   $("#libraryBtn").addEventListener("click", openLibrary);
-  $("#restpill").addEventListener("click", cancelRest);
+  $("#restMain").addEventListener("click", toggleRestMenu);
+  $("#restPlus").addEventListener("click", function () { addRest(30); });
+  $("#restSkip").addEventListener("click", cancelRest);
   var ghostBtn = $("#ghostToggle");
   if (ghostBtn) ghostBtn.addEventListener("click", function () {
     ghostOn = !ghostOn;
@@ -3553,10 +4518,15 @@
 
   function syncOn() { return !!syncCfg; }
 
+  // A sync that waited for a form to close (logPaneOpen) runs when it has.
+  function retryDeferredSync() {
+    if (syncAgain && syncOn() && !logPaneOpen()) { syncAgain = false; scheduleSync(); }
+  }
+
   function logPaneOpen() {
     var top = uiStack[uiStack.length - 1];
     // Also the quick sheet: a sync must not re-render a form mid-entry.
-    return !!top && (top.t === "log" || top.t === "quick");
+    return !!top && /^(log|quick|gym|exform)$/.test(top.t);
   }
 
   // Every change goes through saveState(), so that is the only place this needs
@@ -3640,6 +4610,7 @@
       var changed = false, savedOk = true;
       if (r.changed) {
         state = r.state;
+        TRAINING.useExercises(state.exercises);
         applyingSync = true;
         savedOk = saveState();
         applyingSync = false;
@@ -3754,6 +4725,7 @@
   /* ---------- Refresh + boot ---------- */
 
   function refresh() {
+    TRAINING.useExercises(state.exercises);
     renderCards();
     animateRadar();
     renderSkillNudge();
@@ -3770,6 +4742,8 @@
 
   // "What's new" is for a device that already had data before this version.
   if (flag(WHATSNEW_KEY) === null) setFlag(WHATSNEW_KEY, untouched() ? "done" : "show");
+  TRAINING.useExercises(state.exercises);
+  resumeRest();
   showTab(initialTab());
   tryImportFromHash();
   tryPairFromHash();
@@ -3809,6 +4783,7 @@
       if (r.readOnly) { readOnly = true; showBanner("newer"); updateSyncUI(); return; }
       if (r.changed) {
         state = r.state;
+        TRAINING.useExercises(state.exercises);
         jumpRadar();
         refresh();
         if (uiStack.length && !logPaneOpen()) renderSheet();

@@ -1,7 +1,8 @@
 /* The content tables in data.js that training.js counts with. A typo in a
    group name, a new ladder step or variation nobody mapped, or a weight
    that isn't 1 or ½ would quietly skew every weekly bar — so each of those
-   fails here instead. (P4 adds the gym catalogue checks to this file.)
+   fails here instead. The gym catalogue's ids are stored in every gym log
+   entry, so they are frozen here too.
    Run with: sh tests/run.sh   (or: node tests/data-test.js) */
 
 const h = require("./harness");
@@ -12,6 +13,7 @@ const T = page.get("TRAINING"), M = page.get("MODEL");
 const AREAS = page.get("AREAS"), VARIATIONS = page.get("VARIATIONS");
 const GROUP_INFO = page.get("GROUP_INFO"), AREA_GROUPS = page.get("AREA_GROUPS");
 const VARIATION_GROUPS = page.get("VARIATION_GROUPS"), QUICK_GROUPS = page.get("QUICK_GROUPS");
+const GYM = page.get("GYM_EXERCISES"), GROUP_DEFAULTS = page.get("GROUP_DEFAULTS");
 const GROUPS = Array.from(M.GROUPS);
 const J = JSON.stringify;
 const keys = o => Object.keys(o);
@@ -139,5 +141,149 @@ GROUPS.forEach(g => {
 check("helpers: chest → arms, shoulders · back → arms · shoulders → arms · none for the rest",
   same(GROUPS.map(g => sorted(keys(QUICK_GROUPS[g]).filter(k => k !== g))),
     [["arms", "shoulders"], ["arms"], ["arms"], [], [], []]));
+
+section("the gym catalogue");
+// The kg step per equipment (data.js explains it). load: what kg means.
+const GYM_INC = { barbell: 2.5, dumbbell: 2, machine: 5, cable: 2.5, kettlebell: 4, bodyweight: 2.5 };
+const EQUIPS = keys(GYM_INC);
+const LOADS = ["ext", "added", "assist", "bw"];
+const GYM_FIELDS = ["id", "name", "p", "s", "equip", "lo", "hi", "inc", "perHand", "load", "timed"];
+
+// Everything wrong with one catalogue entry ([] = fine).
+function gymProblems(e) {
+  if (!e || typeof e !== "object" || Array.isArray(e)) return ["not an object"];
+  const out = [];
+  if (!same(sorted(keys(e)), sorted(GYM_FIELDS))) out.push("fields are " + J(keys(e)) + ", should be " + J(GYM_FIELDS));
+  if (typeof e.id !== "string" || !/^[a-z0-9_]{1,40}$/.test(e.id)) out.push("id is not lowercase snake_case, 1–40 characters");
+  else if (e.id.indexOf("x_") === 0) out.push("\"x_\" ids are reserved for custom exercises");
+  else if (e.id in Object.prototype) out.push("id is a name every object inherits");
+  if (typeof e.name !== "string" || !e.name || e.name.length > 40 || e.name !== e.name.replace(/\s+/g, " ").trim())
+    out.push("name is empty, over 40 characters or badly spaced");
+  if (GROUPS.indexOf(e.p) === -1) out.push("p is not a group");
+  if (!Array.isArray(e.s)) out.push("s is not a list");
+  else {
+    if (e.s.length > 3) out.push("more than 3 secondary groups");
+    if (!e.s.every(g => GROUPS.indexOf(g) !== -1)) out.push("s has something that isn't a group");
+    if (new Set(e.s).size !== e.s.length) out.push("s repeats a group");
+    if (e.s.indexOf(e.p) !== -1) out.push("s repeats p");
+    if (!same(Array.from(e.s), GROUPS.filter(g => e.s.indexOf(g) !== -1))) out.push("s is not in MODEL.GROUPS order");
+  }
+  if (EQUIPS.indexOf(e.equip) === -1) out.push("equip is not one of " + EQUIPS.join(", "));
+  if (LOADS.indexOf(e.load) === -1) out.push("load is not one of " + LOADS.join(", "));
+  if (!(Number.isInteger(e.lo) && Number.isInteger(e.hi) && e.lo >= 1 && e.lo <= e.hi && e.hi <= 600))
+    out.push("not 1 ≤ lo ≤ hi ≤ 600 (whole numbers)");
+  if (!(typeof e.inc === "number" && e.inc >= 0.25 && e.inc <= 50 && e.inc * 4 === Math.round(e.inc * 4)))
+    out.push("inc is not a multiple of 0.25 kg in 0.25–50");
+  else if (e.inc !== GYM_INC[e.equip]) out.push("inc " + e.inc + " but " + e.equip + " steps by " + GYM_INC[e.equip]);
+  if (typeof e.perHand !== "boolean") out.push("perHand is not true/false");
+  else if (e.perHand && e.equip !== "dumbbell" && e.equip !== "kettlebell") out.push("perHand without dumbbells or kettlebells");
+  if (typeof e.timed !== "boolean") out.push("timed is not true/false");
+  else if (e.timed && e.load !== "bw") out.push("timed, but the load isn't bodyweight only");
+  // What kg means has to fit the equipment: added weight and bodyweight-only
+  // are bodyweight exercises, assistance comes from a machine.
+  if ((e.load === "added" || e.load === "bw") !== (e.equip === "bodyweight")) out.push("load " + e.load + " doesn't fit equipment " + e.equip);
+  if (e.load === "assist" && e.equip !== "machine") out.push("assisted, but not on a machine");
+  return out;
+}
+
+check("GYM_EXERCISES is a list of about 42", Array.isArray(GYM) && GYM.length >= 40, GYM && GYM.length);
+GYM.forEach(e => {
+  const p = gymProblems(e);
+  check((e && e.id) + " — " + (e && e.name), !p.length, p.join("; "));
+});
+{
+  const ids = GYM.map(e => e.id);
+  const dup = ids.filter((id, i) => ids.indexOf(id) !== i);
+  check("ids are unique", !dup.length, dup.join(", "));
+  const names = GYM.map(e => String(e.name).toLowerCase());
+  const dupN = names.filter((n, i) => names.indexOf(n) !== i);
+  check("names are unique (the picker lists exercises by name)", !dupN.length, dupN.join(", "));
+  GROUPS.forEach(g => {
+    const n = GYM.filter(e => e.p === g).length;
+    check(g + ": at least 4 exercises to choose from", n >= 4, n);
+  });
+  check("the plank is the only timed exercise, 20–60 s",
+    same(GYM.filter(e => e.timed).map(e => [e.id, e.lo, e.hi]), [["plank", 20, 60]]));
+  check("kg per hand: the dumbbell-in-each-hand and one-arm exercises, not the goblet squat",
+    same(GYM.filter(e => e.perHand).map(e => e.id),
+      ["bench_db", "incline_db", "row_db", "ohp_db", "lateral_db", "rear_fly_db", "curl_db", "hammer_db", "bulgarian_db"]));
+  check("added weight: dips, weighted chin-up, back extension, bench dips · assisted: the pull-up machine · bodyweight only: ab wheel, plank",
+    same(["added", "assist", "bw"].map(l => GYM.filter(e => e.load === l).map(e => e.id)),
+      [["dips", "chinup_w", "back_ext", "bench_dips"], ["pullup_assist"], ["ab_wheel", "plank"]]));
+  const byId = {};
+  GYM.forEach(e => { byId[e.id] = e; });
+  const groupsOf = id => byId[id] ? [byId[id].p].concat(Array.from(byId[id].s)) : null;
+  check("deadlift: back + ½ legs · Romanian deadlift: legs + ½ back",
+    same(groupsOf("deadlift"), ["back", "legs"]) && same(groupsOf("rdl_bb"), ["legs", "back"]));
+  check("squats, leg press and isolation lifts count for their own group only",
+    ["squat_bb", "leg_press", "hack_squat", "goblet_squat", "leg_curl", "leg_ext", "pec_deck", "lateral_db", "curl_db", "pushdown", "crunch_cable"]
+      .every(id => same(groupsOf(id), [byId[id].p])));
+}
+
+section("frozen gym ids (they live in stored logs)");
+{
+  // Every id ever shipped. A gym log entry keeps its exercise's id for good
+  // (exId), so an id that disappears from GYM_EXERCISES orphans history on
+  // every device and in every backup. Never remove one from this list; a
+  // new exercise adds its id here, and from then on it is permanent too.
+  const FROZEN = [
+    "bench_bb", "bench_db", "incline_db", "chest_press", "pec_deck", "fly_cable", "dips",
+    "pulldown", "row_cable", "row_db", "row_bb", "pullup_assist", "chinup_w", "deadlift", "back_ext",
+    "ohp_bb", "ohp_db", "lateral_db", "lateral_cable", "rear_fly_db", "face_pull",
+    "curl_db", "hammer_db", "curl_bb", "pushdown", "oh_ext_cable", "skull_bb", "bench_dips",
+    "crunch_cable", "ab_wheel", "plank", "pallof",
+    "squat_bb", "leg_press", "hack_squat", "rdl_bb", "leg_curl", "leg_ext", "bulgarian_db", "hip_thrust_bb", "calf_raise", "goblet_squat"
+  ];
+  const ids = GYM.map(e => e.id);
+  const gone = FROZEN.filter(id => ids.indexOf(id) === -1);
+  check("no shipped id has been renamed or removed", !gone.length, "missing: " + gone.join(", ") + " — put them back, stored logs use them");
+  const fresh = ids.filter(id => FROZEN.indexOf(id) === -1);
+  check("every id is in the frozen list", !fresh.length, "new: " + fresh.join(", ") + " — add them to FROZEN (they are permanent from now on)");
+}
+
+section("gym defaults");
+check("GROUP_DEFAULTS lists MODEL.GROUPS, in that order", same(keys(GROUP_DEFAULTS), GROUPS), J(keys(GROUP_DEFAULTS)));
+check("chest 4 · back 3 · shoulders 3 · arms 4 · abs 3 · legs 5",
+  same(GROUPS.map(g => (GROUP_DEFAULTS[g] || []).length), [4, 3, 3, 4, 3, 5]), J(GROUPS.map(g => (GROUP_DEFAULTS[g] || []).length)));
+GROUPS.forEach(g => {
+  const list = Array.from(GROUP_DEFAULTS[g] || []);
+  const bad = list.filter(id => !GYM.some(e => e.id === id && e.p === g));
+  check(g + ": every default is in the catalogue with " + g + " as its main group", !bad.length, bad.join(", "));
+  check(g + ": no default twice", new Set(list).size === list.length, J(list));
+  const bb = list.filter(id => GYM.some(e => e.id === id && e.equip === "barbell"));
+  check(g + ": no barbells (dumbbells, cables and machines first)", !bb.length, bb.join(", "));
+});
+
+section("the catalogue fits the stored-data rules (model.js)");
+{
+  // A tweak to a built-in exercise is stored as { id, inc, lo, hi, note }:
+  // the catalogue's own values must survive it unchanged.
+  const tweakBad = GYM.filter(e => {
+    const r = M.sanitizeExercise({ id: e.id, inc: e.inc, lo: e.lo, hi: e.hi, note: "", mts: 1 });
+    return !r || !same(r, { id: e.id, inc: e.inc, lo: e.lo, hi: e.hi, note: "", mts: 1 });
+  }).map(e => e.id);
+  check("every id can carry a tweak, and sanitizeExercise keeps the catalogue's inc, lo and hi", !tweakBad.length, tweakBad.join(", "));
+
+  // A custom exercise uses the same field formats (group = p, sec = s): a
+  // copy of any catalogue entry saved as a custom one comes back identical.
+  const customBad = GYM.filter(e => {
+    const r = M.sanitizeExercise({ id: "x_" + e.id, name: e.name, group: e.p, sec: e.s, equip: e.equip, load: e.load,
+      timed: e.timed, perHand: e.perHand, inc: e.inc, lo: e.lo, hi: e.hi, note: "", mts: 1 });
+    return !r || !same([r.name, r.group, r.sec, r.equip, r.load, r.timed, r.perHand, r.inc, r.lo, r.hi],
+      [e.name, e.p, e.s, e.equip, e.load, e.timed, e.perHand, e.inc, e.lo, e.hi]);
+  }).map(e => e.id);
+  check("every entry saved as a custom exercise (\"x_\" + id) comes back unchanged", !customBad.length, customBad.join(", "));
+
+  const incBad = EQUIPS.filter(eq => M.sanitizeExercise({ id: "x_t", name: "T", group: "chest", equip: eq }).inc !== GYM_INC[eq]);
+  check("a custom exercise gets the same kg step for the same equipment", !incBad.length, incBad.join(", "));
+
+  // And a gym log entry for each exercise is kept as logged.
+  const logBad = GYM.filter(e => {
+    const kg = e.load === "bw" ? [0, 0] : [20, 22.5];
+    const r = M.sanitizeLogEntry({ id: "g1", ts: 1000, kind: "gym", exId: e.id, sets: [e.lo, e.hi], kg, note: "", mts: 1000 });
+    return !r || r.exId !== e.id || !same(r.sets, [e.lo, e.hi]) || !same(r.kg, kg);
+  }).map(e => e.id);
+  check("a gym log entry for every exercise is kept as logged", !logBad.length, logBad.join(", "));
+}
 
 h.done(__filename);

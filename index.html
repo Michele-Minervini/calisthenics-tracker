@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="milo-v19">
+<html lang="en" data-build="milo-v20">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -84,7 +84,10 @@
   <div id="scrim"></div>
   <div id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden></div>
   <div id="tooltip" role="presentation"></div>
-  <button id="restpill" type="button" hidden aria-label="Rest timer — tap to cancel"><span id="restpill-time"></span><span class="restx">&#10005;</span></button>
+  <div id="restpill" hidden>
+    <button id="restMain" type="button" aria-expanded="false" aria-controls="restMenu" aria-label="Rest timer: more time or skip"><span id="restpill-time"></span></button>
+    <span id="restMenu" class="restmenu" hidden><button id="restPlus" type="button">+30 s</button><button id="restSkip" type="button">Skip</button></span>
+  </div>
   <span id="sr-live" class="visually-hidden" aria-live="polite"></span>
   <div id="toast" role="status"></div>
 

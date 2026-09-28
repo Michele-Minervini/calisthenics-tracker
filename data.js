@@ -1,13 +1,14 @@
 /* ============================================================
    Milo — exercise data
    The six skill ladders (ten progressive steps each), their swaps
-   and warm-ups, and the muscle groups each kind of training works.
+   and warm-ups, the muscle groups each kind of training works, and
+   the gym catalogue.
    Standards: [Beginner, Intermediate, Progression] —
    the 10th step's third standard is the Elite standard.
    ============================================================ */
 
 /* Build stamp: app.js refuses to run on files from two different releases. */
-const DATA_BUILD = "milo-v19";
+const DATA_BUILD = "milo-v20";
 
 const AREAS = [
   {
@@ -1232,4 +1233,117 @@ const QUICK_GROUPS = {
   arms:      { arms: 1 },
   abs:       { abs: 1 },
   legs:      { legs: 1 }
+};
+
+/* ============================================================
+   The gym catalogue — the built-in exercises of the gym sheet.
+
+   `id` IS PERMANENT. Every gym log entry stores it (exId), and so
+   does every tweak someone makes to a built-in exercise
+   (state.exercises), on every device and in every backup, for
+   good. Never rename, reuse or remove an id: the old entries would
+   stay, but nothing would know what they were. Names, rep ranges,
+   steps and groups can be fixed freely — they are read from here
+   each time. tests/data-test.js keeps a frozen list of the ids, so
+   a changed one fails there first.
+   Ids are lowercase snake_case: the movement, then the equipment
+   when the movement is done with more than one (bench_bb,
+   bench_db). "x_" ids are reserved for custom exercises.
+
+     name     what the picker and the gym sheet show
+     p        the group one hard set counts 1 for
+     s        groups it also counts ½ for (0–3, in MODEL.GROUPS
+              order). Kept conservative, only helpers that clearly
+              work hard: presses give ½ to shoulders and arms, pulls
+              ½ to arms; squats and isolation work give nothing.
+     equip    barbell · dumbbell · machine · cable · kettlebell ·
+              bodyweight
+     lo, hi   the rep range the double progression works in
+              (seconds when `timed`): heavy barbell compounds 5–8 or
+              6–10, other compounds 8–12, isolation 10–15, calves
+              10–20, the ab wheel 8–15, the plank 20–60 s
+     inc      the kg step once every set reaches hi, by equipment:
+              barbell 2.5 · dumbbell 2 · machine 5 · cable 2.5 ·
+              kettlebell 4 · bodyweight 2.5 (the smallest plate you
+              add). A tweak in state.exercises can change inc, lo and
+              hi for one person.
+     perHand  kg is the weight of ONE dumbbell (one in each hand, or
+              one for the working arm); e1RM is per hand too
+     load     what kg means:
+                ext     the weight lifted (bar, dumbbells, stack)
+                added   bodyweight plus kg on a belt or between the
+                        feet; 0 = bodyweight alone
+                assist  the machine's help: less kg is harder
+                bw      bodyweight only, kg is always 0
+     timed    sets are seconds held, not reps
+   ============================================================ */
+const GYM_EXERCISES = [
+  // Chest
+  { id: "bench_bb",      name: "Barbell bench press",        p: "chest",     s: ["shoulders", "arms"], equip: "barbell",    lo: 6,  hi: 10, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "bench_db",      name: "Dumbbell bench press",       p: "chest",     s: ["shoulders", "arms"], equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "incline_db",    name: "Incline dumbbell press",     p: "chest",     s: ["shoulders", "arms"], equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "chest_press",   name: "Machine chest press",        p: "chest",     s: ["shoulders", "arms"], equip: "machine",    lo: 8,  hi: 12, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "pec_deck",      name: "Pec deck",                   p: "chest",     s: [],                    equip: "machine",    lo: 10, hi: 15, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "fly_cable",     name: "Cable fly",                  p: "chest",     s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "dips",          name: "Dips",                       p: "chest",     s: ["shoulders", "arms"], equip: "bodyweight", lo: 8,  hi: 12, inc: 2.5, perHand: false, load: "added",  timed: false },
+  // Back
+  { id: "pulldown",      name: "Lat pulldown",               p: "back",      s: ["arms"],              equip: "cable",      lo: 8,  hi: 12, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "row_cable",     name: "Seated cable row",           p: "back",      s: ["arms"],              equip: "cable",      lo: 8,  hi: 12, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "row_db",        name: "One-arm dumbbell row",       p: "back",      s: ["arms"],              equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "row_bb",        name: "Barbell row",                p: "back",      s: ["arms"],              equip: "barbell",    lo: 6,  hi: 10, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "pullup_assist", name: "Assisted pull-up",           p: "back",      s: ["arms"],              equip: "machine",    lo: 8,  hi: 12, inc: 5,   perHand: false, load: "assist", timed: false },
+  { id: "chinup_w",      name: "Weighted chin-up",           p: "back",      s: ["arms"],              equip: "bodyweight", lo: 6,  hi: 10, inc: 2.5, perHand: false, load: "added",  timed: false },
+  // The deadlift counts for back: the whole posterior chain works, but what
+  // gives out first is the back holding its shape (spinal erectors, traps,
+  // lats), and the hamstring-first version is the Romanian deadlift below
+  // (legs + ½ back). Hips and legs drive it, so legs get ½.
+  { id: "deadlift",      name: "Deadlift",                   p: "back",      s: ["legs"],              equip: "barbell",    lo: 5,  hi: 8,  inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "back_ext",      name: "Back extension",             p: "back",      s: ["legs"],              equip: "bodyweight", lo: 10, hi: 15, inc: 2.5, perHand: false, load: "added",  timed: false },
+  // Shoulders
+  { id: "ohp_bb",        name: "Overhead press",             p: "shoulders", s: ["arms"],              equip: "barbell",    lo: 6,  hi: 10, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "ohp_db",        name: "Seated dumbbell press",      p: "shoulders", s: ["arms"],              equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "lateral_db",    name: "Dumbbell lateral raise",     p: "shoulders", s: [],                    equip: "dumbbell",   lo: 10, hi: 15, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "lateral_cable", name: "Cable lateral raise",        p: "shoulders", s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "rear_fly_db",   name: "Rear-delt fly",              p: "shoulders", s: [],                    equip: "dumbbell",   lo: 10, hi: 15, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "face_pull",     name: "Face pull",                  p: "shoulders", s: ["back"],              equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  // Arms
+  { id: "curl_db",       name: "Dumbbell curl",              p: "arms",      s: [],                    equip: "dumbbell",   lo: 10, hi: 15, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "hammer_db",     name: "Hammer curl",                p: "arms",      s: [],                    equip: "dumbbell",   lo: 10, hi: 15, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "curl_bb",       name: "Barbell curl",               p: "arms",      s: [],                    equip: "barbell",    lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "pushdown",      name: "Triceps pushdown",           p: "arms",      s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "oh_ext_cable",  name: "Overhead triceps extension", p: "arms",      s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "skull_bb",      name: "Skull crusher",              p: "arms",      s: [],                    equip: "barbell",    lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "bench_dips",    name: "Bench dips",                 p: "arms",      s: ["shoulders"],         equip: "bodyweight", lo: 10, hi: 15, inc: 2.5, perHand: false, load: "added",  timed: false },
+  // Abs
+  { id: "crunch_cable",  name: "Cable crunch",               p: "abs",       s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "ab_wheel",      name: "Ab wheel",                   p: "abs",       s: [],                    equip: "bodyweight", lo: 8,  hi: 15, inc: 2.5, perHand: false, load: "bw",     timed: false },
+  { id: "plank",         name: "Plank",                      p: "abs",       s: [],                    equip: "bodyweight", lo: 20, hi: 60, inc: 2.5, perHand: false, load: "bw",     timed: true },
+  { id: "pallof",        name: "Pallof press",               p: "abs",       s: [],                    equip: "cable",      lo: 10, hi: 15, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  // Legs
+  { id: "squat_bb",      name: "Back squat",                 p: "legs",      s: [],                    equip: "barbell",    lo: 5,  hi: 8,  inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "leg_press",     name: "Leg press",                  p: "legs",      s: [],                    equip: "machine",    lo: 8,  hi: 12, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "hack_squat",    name: "Hack squat",                 p: "legs",      s: [],                    equip: "machine",    lo: 8,  hi: 12, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "rdl_bb",        name: "Romanian deadlift",          p: "legs",      s: ["back"],              equip: "barbell",    lo: 8,  hi: 12, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "leg_curl",      name: "Leg curl",                   p: "legs",      s: [],                    equip: "machine",    lo: 10, hi: 15, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "leg_ext",       name: "Leg extension",              p: "legs",      s: [],                    equip: "machine",    lo: 10, hi: 15, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "bulgarian_db",  name: "Bulgarian split squat",      p: "legs",      s: [],                    equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: true,  load: "ext",    timed: false },
+  { id: "hip_thrust_bb", name: "Hip thrust",                 p: "legs",      s: [],                    equip: "barbell",    lo: 8,  hi: 12, inc: 2.5, perHand: false, load: "ext",    timed: false },
+  { id: "calf_raise",    name: "Calf raise",                 p: "legs",      s: [],                    equip: "machine",    lo: 10, hi: 20, inc: 5,   perHand: false, load: "ext",    timed: false },
+  { id: "goblet_squat",  name: "Goblet squat",               p: "legs",      s: [],                    equip: "dumbbell",   lo: 8,  hi: 12, inc: 2,   perHand: false, load: "ext",    timed: false }
+];
+
+/* What a gym day starts from for each group when the history has
+   nothing better. Dumbbells, cables, machines and floor work, no
+   barbells: quick to set up, easy to learn, safe to take close to
+   failure without a spotter. Most important first — a day with room for fewer keeps
+   the front of the list — and in the order a session does them (the
+   big movement first). Abs also get the leg-raise skill. Every id is
+   a GYM_EXERCISES id whose p is this group (tests/data-test.js). */
+const GROUP_DEFAULTS = {
+  chest:     ["bench_db", "incline_db", "chest_press", "pec_deck"],
+  back:      ["pulldown", "row_cable", "row_db"],
+  shoulders: ["ohp_db", "lateral_db", "rear_fly_db"],
+  arms:      ["curl_db", "pushdown", "hammer_db", "oh_ext_cable"],
+  abs:       ["crunch_cable", "ab_wheel", "plank"],
+  legs:      ["leg_press", "leg_curl", "bulgarian_db", "leg_ext", "calf_raise"]
 };
