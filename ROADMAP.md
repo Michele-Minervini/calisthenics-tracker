@@ -1,4 +1,4 @@
-# Big Six Tracker — Roadmap & Decisions
+# Milo (formerly Big Six Tracker) — Roadmap & Decisions
 
 A running record of where the app is, what's next, and the reasoning behind
 the choices — so the context survives across work sessions.
@@ -17,6 +17,7 @@ All tiers are built, tested, and deployed (service worker `bigsix-v10`).
 | **Tier 1** | v5 | Log a session (sets/reps or hold time); auto-detection of the Beginner/Intermediate/Progression standard with a move-up prompt; global rest timer; training-history list; downloadable full backup file. |
 | **Tier 2** | v7–v8 | Weekly routine + "Today's session" card; smart nudge; ghost radar (past vs now); GitHub-style training heatmap; streaks; milestone timeline; per-exercise sparkline; edit a logged session; QR code for the backup link. |
 | **Tier 3** | v9–v10 | Day detail (tap a heatmap square for that day's sessions); **optional cloud sync** across devices, paired by QR. |
+| **Milo P1–P2a** | v16–milo-v18 | Renamed **Milo**. Data v5 (entry kinds, per-field settings sync, a new sync record, guards against old copies), tests; quick **gym day** log; home bars of **hard sets per muscle group this week** against 10–20 (arms/legs 20–40). Plan for the rest: `~/.claude/plans/i-want-to-rename-distributed-goblet.md` (P3 tabs, P4 gym exercises, P2b move to /milo/, P5–P7). |
 | **Tier 4** | v15 | **The plan.** Every movement carries a prescription (exercise, sets, reps, standard being chased) derived from your current position; guided session walkthrough; 38 swap variations; exercise library; week view with a per-area "what's next" map. |
 
 Each tier went through an adversarial multi-agent review before shipping; the
@@ -62,7 +63,7 @@ None committed — just a menu for later:
 
 ## Working notes for future edits
 
-- **Every deploy gets a new build: `sh tools/set-build.sh bigsix-vN`**, then
+- **Every deploy gets a new build: `sh tools/set-build.sh milo-vN`**, then
   `git add -A` and `sh tests/run.sh` (README has the four steps). The service
   worker only serves what it cached when its `VERSION` last changed — no
   background refreshing, which could mix two releases — so without a new build
@@ -75,12 +76,23 @@ None committed — just a menu for later:
   `tests/static-test.js` fails when stamps disagree, when the page loads a file
   that isn't cached or isn't in git, or when app files changed but the build
   number didn't.
+- **A new script needs five things:** a `<script>` tag in index.html (after
+  model.js, before app.js), an entry in sw.js `ASSETS` and `STAMPED`, a
+  `  var BUILD = "…";` stamp that tools/set-build.sh rewrites (add the file to
+  its loop), the stamp in tests/static-test.js, and a `buildParts` entry at the
+  top of app.js. static-test catches a missing ASSETS/STAMPED entry.
+- **Weekly volume is counted, never stored** (training.js). Each hard set counts
+  1 for its main muscle group and ½ for each helper (data.js `AREA_GROUPS`,
+  per-step overrides, `VARIATION_GROUPS`); a quick gym day gives its groups'
+  usual helpers ¼ per set (`QUICK_GROUPS`). Targets are the base range in
+  `settings.vol` times `GROUP_INFO.scale` (arms and legs ×2). A new variation
+  or step fails tests/data-test.js until it is mapped.
 - **"Finishing an update"** is what app.js shows, before touching storage, if
   a launch ever gets files from two builds. Reload asks for the new release;
   a second time in a row it drops this app's offline copy (never its data) and
   loads from the network. Offline, it says so and reloads itself when the
   connection returns.
-- **Cache names carry the app's path** (`bigsix-v16@/calisthenics-tracker/`),
+- **Cache names carry the app's path** (`milo-v18@/calisthenics-tracker/`),
   and cleanup only deletes this path's old versions (plus the pre-stamp
   `bigsix-vN` caches, and only when running at `/calisthenics-tracker/`, the
   one place that created them). Cache Storage is shared by the whole

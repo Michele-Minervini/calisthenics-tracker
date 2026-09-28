@@ -1,12 +1,13 @@
 /* ============================================================
-   Big Six Tracker — exercise data
-   Six movement families, ten progressive steps each.
+   Milo — exercise data
+   The six skill ladders (ten progressive steps each), their swaps
+   and warm-ups, and the muscle groups each kind of training works.
    Standards: [Beginner, Intermediate, Progression] —
    the 10th step's third standard is the Elite standard.
    ============================================================ */
 
 /* Build stamp: app.js refuses to run on files from two different releases. */
-const DATA_BUILD = "bigsix-v17";
+const DATA_BUILD = "milo-v18";
 
 const AREAS = [
   {
@@ -1107,4 +1108,128 @@ const WARMUPS = {
   squat: ["Ankle and knee circles", "10 bodyweight squats to a comfortable depth", "A few slow calf raises"],
   bridge: ["Gentle backbends standing, hands on hips", "Shoulder openers against a wall", "A few short bridges"],
   hspu: ["Wrist circles and wrist push-backs on the floor", "Shoulder rolls and arm circles", "A 15-second pike hold"]
+};
+
+/* ============================================================
+   Muscle groups — what each kind of training counts for.
+
+   (Proposed addition to the end of data.js, after WARMUPS.)
+
+   Six groups, in the order MODEL.GROUPS lists them: chest, back,
+   shoulders, arms, abs, legs. Weekly volume is counted in HARD SETS:
+   working sets taken close to failure. Warm-ups don't count.
+
+   A weight map says what ONE hard set counts for, per group:
+     1     the group the exercise is mainly for (never more than one)
+     0.5   a group that helps ("indirect work counts half")
+   A group that isn't listed gets nothing. {} counts for nothing at
+   all (mobility work). A map may have no 1 at all: a movement too
+   light to be a full set for anything still gives ½ to what it works.
+   training.js multiplies these by the sets logged and adds them up.
+   ============================================================ */
+
+/* The six groups. `scale` multiplies the weekly target (Settings →
+   volume, default 10–20 hard sets): arms and legs are two or more
+   muscles each, so their targets are 20–40. Derived here, never stored. */
+const GROUP_INFO = {
+  chest:     { name: "Chest",     short: "Chest", scale: 1, muscles: "chest" },
+  back:      { name: "Back",      short: "Back",  scale: 1, muscles: "lats, upper and lower back" },
+  shoulders: { name: "Shoulders", short: "Delts", scale: 1, muscles: "front, side and rear delts" },
+  arms:      { name: "Arms",      short: "Arms",  scale: 2, muscles: "biceps + triceps" },
+  abs:       { name: "Abs",       short: "Abs",   scale: 1, muscles: "abs and obliques" },
+  legs:      { name: "Legs",      short: "Legs",  scale: 2, muscles: "quads, hamstrings, glutes, calves" }
+};
+
+/* One set of a ladder step. `all` applies to every step of the area;
+   `step` replaces it for the steps listed (by step number, 1–10) —
+   the easy ends of some ladders train something else, or train
+   too little to be a full set. */
+const AREA_GROUPS = {
+  pushup:   { all: { chest: 1, arms: 0.5, shoulders: 0.5 } },
+  pullup:   { all: { back: 1, arms: 0.5 } },
+  legraise: { all: { abs: 1 } },
+  squat:    { all: { legs: 1 } },
+  bridge:   { all: { back: 1, legs: 0.5, shoulders: 0.5 },
+              step: {
+                1: { legs: 1, back: 0.5 },          // Short Bridges: a glute bridge
+                2: { back: 1, legs: 0.5 }           // Straight Bridges: no shoulder load yet
+              } },
+  hspu:     { all: { shoulders: 1, arms: 0.5 },
+              step: {
+                1: { shoulders: 0.5, abs: 0.5 },    // Wall Headstands: a balance hold
+                2: { shoulders: 0.5, abs: 0.5 },    // Crow Stands: a balance hold
+                3: { shoulders: 1, abs: 0.5 }       // Wall Handstands: full load, no pressing
+              } }
+};
+
+/* One set of a variation (VARIATIONS, same names exactly). Every
+   variation is listed, so a new one can't slip in unconsidered
+   (tests/data-test.js fails until it's added here). "step" means it
+   counts like the ladder step it's done at, including that step's
+   override. A logged name that is no longer in this table — renamed
+   or removed since — also counts like its step. */
+const VARIATION_GROUPS = {
+  pushup: {
+    "Plank Hold": { abs: 1 },
+    "Slow Negatives": "step",
+    "Paused Reps": "step",
+    "Tempo Pushups": "step",
+    "Wide Pushups": "step",
+    "Knuckle Pushups": "step",
+    "Decline Pushups": "step",
+    "Explosive Pushups": "step"
+  },
+  pullup: {
+    "Dead Hangs": { arms: 0.5 },                // grip work: half a set, for the forearms
+    "Scapular Pulls": { back: 0.5 },            // the first inch of a pullup only
+    "Slow Negatives": "step",
+    "Chin-Up Grip": "step",
+    "Paused Pullups": "step",
+    "Wide Pullups": "step",
+    "Towel Grip": "step"
+  },
+  legraise: {
+    "Hollow Body Hold": "step",
+    "Paused Raises": "step",
+    "Slow Lowering": "step",
+    "Twisting Raises": "step",
+    "L-Sit Hold": { abs: 1, arms: 0.5 },        // the arms hold you up
+    "Bent-Knee Hangs": "step"
+  },
+  squat: {
+    "Wall Sit": "step",
+    "Paused Squats": "step",
+    "Slow Negatives": "step",
+    "Split Squats": "step",
+    "Jump Squats": "step",
+    "Calf Raises": "step"
+  },
+  bridge: {
+    "Shoulder Openers": {},                     // mobility: counts for nothing
+    "Bridge Hold": "step",
+    "Hip Thrusts": { legs: 1, back: 0.5 },
+    "Rocking Bridges": "step",
+    "Bridge Walks": "step"
+  },
+  hspu: {
+    "Pike Hold": { shoulders: 0.5 },            // handstand loading with the feet down
+    "Pike Pushups": { shoulders: 1, arms: 0.5 },     // a press, even when done at step 3
+    "Wall Walks": { shoulders: 1, abs: 0.5 },
+    "Slow Negatives": "step",
+    "Shoulder Taps": { shoulders: 1, abs: 0.5 },     // a handstand hold, not a press
+    "Freestanding Practice": { shoulders: 1, abs: 0.5 }
+  }
+};
+
+/* A quick log records working sets per group without the exercises,
+   so its indirect work is a guess: the groups that usually help, at
+   ¼ per set (half the ½ an exercise would give, because some of
+   those sets — flyes, lateral raises — barely use them). */
+const QUICK_GROUPS = {
+  chest:     { chest: 1, arms: 0.25, shoulders: 0.25 },
+  back:      { back: 1, arms: 0.25 },
+  shoulders: { shoulders: 1, arms: 0.25 },
+  arms:      { arms: 1 },
+  abs:       { abs: 1 },
+  legs:      { legs: 1 }
 };

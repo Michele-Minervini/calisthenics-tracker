@@ -1,5 +1,5 @@
 /* ============================================================
-   Big Six Tracker — data model.
+   Milo — data model.
 
    Everything that decides what a saved state looks like: the
    calendar-day helpers, the default state, the sanitizers every
@@ -33,7 +33,7 @@
 var MODEL = (function () {
   "use strict";
 
-  var BUILD = "bigsix-v17";
+  var BUILD = "milo-v18";
 
   // The shape of the stored data. Any change to what the sanitizers output is a
   // change to what every device keeps: bump this, and see ROADMAP.md.
@@ -192,6 +192,14 @@ var MODEL = (function () {
   function isNewer(raw) {
     return !!raw && typeof raw === "object" && Number(raw.v) > MODEL_VERSION;
   }
+
+  /* ---------- Entry kinds ---------- */
+
+  // A skill-ladder session: the only kind with areaId, step, sets and variant.
+  function isBodyweight(e) { return !!e && !e.kind; }
+  // Any training: everything except a weigh-in (and kinds this version
+  // doesn't know, which the sanitizer drops anyway).
+  function isTraining(e) { return !!e && (!e.kind || e.kind === "gym" || e.kind === "quick"); }
 
   /* ---------- Sanitizing ---------- */
 
@@ -743,11 +751,14 @@ var MODEL = (function () {
     defaultRoutine: defaultRoutine,
     defaultState: defaultState,
     isNewer: isNewer,
+    isBodyweight: isBodyweight,
+    isTraining: isTraining,
     sanitizeState: sanitizeState,
     sanitizeTombstone: sanitizeTombstone,
     sanitizeSnapshot: sanitizeSnapshot,
     sanitizeMilestone: sanitizeMilestone,
     sanitizeLogEntry: sanitizeLogEntry,
+    sortLog: sortLog,
     sanitizeExercise: sanitizeExercise,
     merge: merge,
     legacyForMerge: legacyForMerge,

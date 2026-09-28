@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Milo (maskable)</title>
+  <!-- Same mark as milo.svg, scaled to 0.835 so every point sits inside the maskable
+       safe zone (circle of radius 204.8 around the centre; the farthest point is at ~197). -->
+  <rect width="512" height="512" fill="#0d0d0d"/>
+  <g fill="#3987e5" transform="translate(256 256) scale(0.835) translate(-256 -248)">
+    <path fill-rule="evenodd" d="M192 208H320V304L304 432H208L192 304Z M208 240L244 256V276L208 260Z M304 240L268 256V276L304 260Z"/>
+    <path d="M336 160H384V272H336Z"/>
+    <path d="M128 160H176V272H128Z"/>
+    <path d="M400 80L448 112V224H400Z"/>
+    <path d="M112 80L64 112V224H112Z"/>
+  </g>
+</svg>

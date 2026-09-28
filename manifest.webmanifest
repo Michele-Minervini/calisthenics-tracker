@@ -1,7 +1,7 @@
 {
-  "name": "Big Six Tracker",
-  "short_name": "Big Six",
-  "description": "Track your progress through the six fundamental bodyweight movements, ten steps each.",
+  "name": "Milo",
+  "short_name": "Milo",
+  "description": "Track your gym days and bodyweight skills across six muscle groups, and do a little more each week.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

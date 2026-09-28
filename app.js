@@ -1,13 +1,14 @@
 /* ============================================================
-   Big Six Tracker — app logic
+   Milo — app logic
    Plain JavaScript, no dependencies.
    The stored state (data v5) is described at the top of model.js, which
    also holds everything that validates, migrates and merges it. Older
    shapes migrate automatically on load. The `mts` / `pm` stamps and
    `deleted` tombstones exist only for sync: they let two devices merge
    without losing or resurrecting anything. Nothing in the UI reads them.
-   Log entries come in kinds: calisthenics sessions (no `kind`), and gym,
-   quick-log and weigh-in entries — this version only displays those.
+   Log entries come in kinds: skill-ladder sessions (no `kind`) and quick
+   gym days ("quick") are logged here; gym-exercise and weigh-in entries
+   are only displayed so far. Volume per muscle group is in training.js.
    std: 0 = working on it, 1 = beginner met, 2 = intermediate met,
         3 = progression (or elite) met.
    Radar value per area = (step - 1) + std / 3  →  0..10 rings filled.
@@ -22,7 +23,7 @@
 (function () {
   "use strict";
 
-  var BUILD = "bigsix-v17";
+  var BUILD = "milo-v18";
   var UPDATE_TRIES_KEY = "bigsix.updateTries";   // must be set before the check below uses it
 
   // Every file carries the same build stamp. If they disagree, the browser has
@@ -34,6 +35,7 @@
     page: document.documentElement.getAttribute("data-build"),
     data: typeof DATA_BUILD === "undefined" ? null : DATA_BUILD,
     model: typeof MODEL === "undefined" ? null : MODEL.BUILD,
+    training: typeof TRAINING === "undefined" ? null : TRAINING.BUILD,
     qr: typeof QR === "undefined" ? null : QR.BUILD,
     sync: typeof SYNC === "undefined" ? null : SYNC.BUILD
   };
@@ -48,6 +50,7 @@
   var startOfDay = MODEL.startOfDay, addDays = MODEL.addDays, dayDelta = MODEL.dayDelta, genId = MODEL.genId;
   var defaultState = MODEL.defaultState, sanitizeState = MODEL.sanitizeState;
   var variationByName = MODEL.variationByName;
+  var isBodyweight = MODEL.isBodyweight, isTraining = MODEL.isTraining;
 
   // Plain DOM and inline styles on purpose: this runs when the other files —
   // style.css included — can't be trusted to be from this release.
@@ -91,7 +94,7 @@
       // Stored data here is newer than this code: nothing may be saved.
       newer: "This device has data from a newer version of the app. Nothing is saved or synced here until it updates.",
       // Only the cloud is newer: this device keeps saving, sync waits.
-      "newer-remote": "The app was updated on another device. Reload to update this one too — until then it saves here but doesn't sync."
+      "newer-remote": "Milo was updated on another device. Reload to update this one too — until then it saves here but doesn't sync."
     }[kind];
     if (!b || !text) return;
     b.innerHTML = "<span>" + text + "</span>" +
@@ -316,6 +319,9 @@
   }
 
   function areaColorVar(a) { return "var(--c-" + a.id + ")"; }
+  // Muscle groups: colour tokens in style.css (--g-*), names in data.js.
+  function groupColorVar(g) { return "var(--g-" + g + ")"; }
+  function groupName(g) { return (GROUP_INFO[g] && GROUP_INFO[g].name) || g; }
 
   function stdLabelFor(area, stepIdx, stdIdx) {
     return area.steps[stepIdx].standards[stdIdx - 1].label;
@@ -599,9 +605,13 @@
 
   /* ---------- Streak + training days ---------- */
 
+  // Days with training (a weigh-in isn't training) → entries that day.
   function trainingDaySet() {
     var s = {};
-    state.log.forEach(function (e) { s[dateStr(e.ts)] = (s[dateStr(e.ts)] || 0) + 1; });
+    state.log.forEach(function (e) {
+      if (!isTraining(e)) return;
+      s[dateStr(e.ts)] = (s[dateStr(e.ts)] || 0) + 1;
+    });
     return s;
   }
   function currentStreak() {
@@ -630,7 +640,11 @@
   /* ---------- Smart nudge ---------- */
 
   function smartNudge() {
-    if (!state.log.length) return "";
+    var st = currentStreak();
+    var streakLine = st >= 2 ? "🔥 " + st + "-day streak — keep it going!" : "";
+    // The per-skill nudges are about the ladders: a log of gym days only
+    // doesn't mean the skills were "never logged".
+    if (!state.log.some(isBodyweight)) return streakLine;
     var today = nowMs();
     var worst = null, worstGap = -1, worstNever = false;
     AREAS.forEach(function (a) {
@@ -640,10 +654,8 @@
       if (gap > worstGap) { worstGap = gap; worst = a; worstNever = !last; }
     });
     if (worst && worstNever) return "You haven't logged " + shortAreaName(worst) + " yet — give it a try.";
-    if (worst && worstGap >= 5) return "You haven't trained " + shortAreaName(worst) + " in " + worstGap + " days.";
-    var st = currentStreak();
-    if (st >= 2) return "🔥 " + st + "-day streak — keep it going!";
-    return "";
+    if (worst && worstGap >= 5) return "You haven't practised " + shortAreaName(worst) + " in " + worstGap + " days.";
+    return streakLine;
   }
 
   /* ---------- Rest timer (global, foreground countdown) ---------- */
@@ -749,7 +761,7 @@
     if (readOnly || loadFailed) {
       try { text = localStorage.getItem(STORE_KEY) || text; } catch (e) { /* keep the in-memory copy */ }
     }
-    saveTextFile(text, "bigsix-backup-" + dateStr(nowMs()) + ".json", "Backup saved ✓");
+    saveTextFile(text, "milo-backup-" + dateStr(nowMs()) + ".json", "Backup saved ✓");
   }
 
   // Side copies kept automatically (see loadState / saveState).
@@ -1042,7 +1054,12 @@
 
   function refreshIfDayChanged() {
     var k = dateStr(nowMs());
-    if (renderedDay && k !== renderedDay) refresh();
+    if (!renderedDay || k === renderedDay) return;
+    refresh();
+    // An open gym-day sheet keeps the day it was started on; redrawn, its
+    // chips say what that day now is ("Yesterday"), so Save can't surprise.
+    var top = uiStack[uiStack.length - 1];
+    if (top && top.t === "quick" && quickDraft) { readQuickInputs(); renderSheet(); }
   }
   document.addEventListener("visibilitychange", function () {
     if (!document.hidden) refreshIfDayChanged();
@@ -1088,10 +1105,14 @@
         '<span class="today-sub">Get a &#8220;today&#8217;s session&#8221; plan across your week.</span></button>');
     }
 
+    // Hard sets per muscle group this week, and the way into the quick gym
+    // log. Its own card, so it reads the same with or without a routine.
+    parts.push(weekCardHTML());
+
     // Outside the routine branch on purpose: the library is a reference you may
     // want whether or not you've set a routine up.
     parts.push('<div class="today-links">' +
-      (routineOn() ? '<button class="tdlink" id="weekBtn">&#128198; This week</button>' : "") +
+      (routineOn() ? '<button class="tdlink" id="weekBtn">&#128198; Week plan</button>' : "") +
       '<button class="tdlink" id="libraryBtn">&#128218; Exercise library</button></div>');
 
     var nudge = smartNudge();
@@ -1117,6 +1138,386 @@
     if (week) week.addEventListener("click", openWeek);
     var lib = $("#libraryBtn", host);
     if (lib) lib.addEventListener("click", openLibrary);
+    var ql = $("#quickLogBtn", host);
+    if (ql) ql.addEventListener("click", function () { openQuick(null); });
+    var vi = $("#volInfoBtn", host);
+    if (vi) vi.addEventListener("click", openVolInfo);
+  }
+
+  /* ---------- This week: hard sets per muscle group (home) ----------
+
+     Six bars, in MODEL.GROUPS order (the same order as the quick sheet's
+     toggles and History's text). Each bar is drawn against its own target:
+     the track is 1.25 × hi long, so the target range always sits at the
+     same place (40–80 % with the default 10–20) and a glance down the
+     column shows which groups have reached it. Colour is identity only;
+     the zone is always written out. */
+
+  function weekCardHTML() {
+    var now = nowMs();
+    var rows = TRAINING.weekSummary(state.log, now, state.settings.vol);
+    var total = 0;
+    var items = rows.map(function (r) {
+      total += r.sets;
+      var max = r.hi * 1.25;
+      var pct = function (x) { return (Math.max(0, Math.min(1, x / max)) * 100).toFixed(1) + "%"; };
+      var n = TRAINING.fmtSets(r.sets);
+      var name = groupName(r.group);
+      var zoneTxt = TRAINING.ZONE_LABELS[r.zone];
+      return '<li class="gw-row z-' + r.zone + '" style="--area:' + groupColorVar(r.group) + '">' +
+        // One sentence for screen readers; the drawing and the short text are hidden from them.
+        '<span class="visually-hidden">' + esc(name + ": " + n + " hard sets, target " + r.lo + " to " + r.hi + ", " + zoneTxt.toLowerCase() + ".") + "</span>" +
+        '<span class="gw-line" aria-hidden="true">' +
+          '<span class="gw-name"><span class="swatch"></span>' + esc(name) + "</span>" +
+          // "Not trained" six times over on a Monday is noise: the grey 0 says it.
+          '<span class="gw-zone">' + (r.zone === "none" ? "" : (r.zone === "on" ? "&#10003; " : "") + esc(zoneTxt)) + "</span>" +
+          '<span class="gw-num"><b>' + esc(n) + "</b> / " + r.lo + "&#8211;" + r.hi + "</span>" +
+        "</span>" +
+        '<span class="gw-bar" aria-hidden="true">' +
+          '<span class="gw-band" style="left:' + pct(r.lo) + ";right:" + (100 - parseFloat(pct(r.hi))).toFixed(1) + '%"></span>' +
+          '<i style="width:' + pct(r.sets) + '"></i>' +
+          '<span class="gw-mark" style="left:' + pct(r.lo) + '"></span>' +
+          '<span class="gw-mark" style="left:' + pct(r.hi) + '"></span>' +
+        "</span></li>";
+    }).join("");
+    return '<div class="today-card gweek">' +
+      '<div class="gw-head">' +
+        '<div class="gw-titles">' +
+          '<h2 class="today-title gw-title">This week' +
+          '<button class="infobtn" id="volInfoBtn" type="button" aria-label="How hard sets are counted">&#9432;</button></h2>' +
+          '<span class="today-sub gw-sub"><span>' + esc(TRAINING.weekLabel(now, true)) + "</span> &middot; <span>hard sets</span></span>" +
+        "</div>" +
+        '<button class="btn gw-add" id="quickLogBtn" type="button">&#65291; Log gym day</button>' +
+      "</div>" +
+      '<ul class="gw-list" aria-label="Hard sets this week, by muscle group">' + items + "</ul>" +
+      // Decided by what was logged, not by the sum: a week of mobility work only
+      // (it counts for no group) still has something logged.
+      (total || TRAINING.inWeek(state.log, now).some(isTraining) ? "" :
+        '<p class="gw-empty">Nothing logged this week yet. Gym days and exercise sessions both count.</p>') +
+      "</div>";
+  }
+
+  function openVolInfo() { pushView({ t: "volinfo" }); }
+
+  // The ⓘ: what a hard set is, why helpers count half, and the targets.
+  function volInfoPaneHTML() {
+    var t = TRAINING.targets(state.settings.vol);
+    var targetRows = MODEL.GROUPS.map(function (g) {
+      return '<div class="stdrow"><span class="lb"><span class="swatch" style="--area:' + groupColorVar(g) + '"></span>' +
+        esc(groupName(g)) + "</span><strong>" + t[g][0] + "&#8211;" + t[g][1] + " sets</strong></div>";
+    }).join("");
+    // Spelled out with the base range's numbers (chest's: never scaled).
+    var lo = t.chest[0], hi = t.chest[1];
+    var zoneRows = [
+      ["Low", "fewer than " + TRAINING.fmtSets(lo / 2)],
+      ["Building", TRAINING.fmtSets(lo / 2) + " up to " + lo],
+      ["On target", lo + "&#8211;" + hi],
+      ["Above target", "more than " + hi]
+    ].map(function (z) {
+      return '<div class="stdrow"><span class="lb">' + z[0] + "</span><span>" + z[1] + "</span></div>";
+    }).join("");
+    return sheetHead({ title: "How the week is counted", sub: "This week &middot; " + esc(TRAINING.weekLabel(nowMs())), back: true, backLabel: "Home" }) +
+      '<div class="sheet-body volinfo">' +
+      "<h4>Hard sets</h4>" +
+      "<p>A hard set is a working set you finish close to your limit &mdash; two or three more reps at most. Warm-ups and easy sets don&#8217;t count.</p>" +
+      "<h4>Helpers count half</h4>" +
+      "<p>Most exercises work one main group and get help from others. The main group gets the whole set, each helper gets &frac12;. One set of push-ups is 1 for chest, &frac12; for arms and &frac12; for shoulders.</p>" +
+      "<p>A gym day logs only the main groups, so helpers get a smaller share: &frac14; per set. Four chest sets also add 1 to arms and 1 to shoulders.</p>" +
+      "<h4>Weekly targets</h4>" +
+      "<p>10&#8211;20 hard sets a week is a range most people grow well in. Arms and legs are several muscles each, so their range is doubled.</p>" +
+      '<div class="stdtable">' + targetRows + "</div>" +
+      "<h4>The zones</h4>" +
+      '<div class="stdtable">' + zoneRows + "</div>" +
+      "<p>For arms and legs, double each number. Above the range now and then is fine. Week after week, extra sets tend to cost more recovery than they give back.</p>" +
+      "<h4>The week</h4>" +
+      "<p>Weeks run Monday to Sunday. The bars start again from zero every Monday.</p>" +
+      "</div>";
+  }
+
+  /* ---------- Quick gym log: working sets per muscle group ----------
+
+     One log entry { kind: "quick", groups: { group: sets } } for a whole
+     gym day. The same sheet edits an existing one (opened from History).
+     Toggles and steppers update in place rather than re-rendering, so
+     focus stays on the control you just used. */
+
+  var QUICK_DEFAULT_SETS = 4;          // P6: the plan's number for that group
+  var DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+  var quickDraft = null;
+
+  function quickDays() {
+    var t = startOfDay(nowMs());
+    return {
+      today: dateStr(t.getTime()),
+      yesterday: dateStr(addDays(t, -1).getTime()),
+      before: dateStr(addDays(t, -2).getTime())
+    };
+  }
+
+  // When a quick entry happened: now if it's for today, else midday of that
+  // day (clear of midnight and of daylight-saving jumps, which are at night).
+  function quickTs(key) {
+    if (key === dateStr(nowMs())) return nowMs();
+    var d = new Date(dateFromKey(key));
+    d.setHours(12, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function clampSets(v, fallback) {
+    if (v === "" || v == null) return fallback;
+    var n = Math.round(Number(v));
+    return isFinite(n) ? Math.min(50, Math.max(1, n)) : fallback;
+  }
+
+  // id: an existing quick entry to edit, or nothing for a new one.
+  function openQuick(id) {
+    var e = null;
+    if (id) state.log.forEach(function (x) { if (x.id === id && x.kind === "quick") e = x; });
+    if (id && !e) return;
+    var k = quickDays();
+    var date = e ? dateStr(e.ts) : k.today;
+    quickDraft = {
+      editId: e ? e.id : null,
+      date: date,
+      pick: date !== k.today && date !== k.yesterday,
+      on: {}, sets: {},
+      note: e ? e.note : ""
+    };
+    MODEL.GROUPS.forEach(function (g) {
+      var n = e ? e.groups[g] : 0;
+      quickDraft.on[g] = !!n;
+      quickDraft.sets[g] = n || QUICK_DEFAULT_SETS;
+    });
+    pushView({ t: "quick" });
+  }
+
+  // Which day chip a draft's date is, right now.
+  function quickMode(d) {
+    var k = quickDays();
+    return d.pick ? "pick" : (d.date === k.today ? "today" : (d.date === k.yesterday ? "yesterday" : "pick"));
+  }
+
+  function quickAnyOn() {
+    return MODEL.GROUPS.some(function (g) { return quickDraft.on[g]; });
+  }
+
+  function quickSummary() {
+    var groups = 0, sets = 0;
+    MODEL.GROUPS.forEach(function (g) { if (quickDraft.on[g]) { groups++; sets += quickDraft.sets[g]; } });
+    if (!groups) return "Pick at least one group to save.";
+    return groups + (groups === 1 ? " group" : " groups") + " &middot; " + sets + (sets === 1 ? " set" : " sets");
+  }
+
+  function quickPaneHTML() {
+    if (!quickDraft) openQuickDraftOnly();
+    var d = quickDraft, k = quickDays(), editing = !!d.editId;
+    var mode = quickMode(d);
+    d.shown = mode;
+    var chip = function (m, label) {
+      return '<button type="button" class="chip qday' + (mode === m ? " sel" : "") + '" data-day="' + m +
+        '" aria-pressed="' + (mode === m ? "true" : "false") + '">' + label + "</button>";
+    };
+    var rows = MODEL.GROUPS.map(function (g) {
+      var on = !!d.on[g], n = d.sets[g], name = groupName(g), lower = esc(name.toLowerCase());
+      return '<li class="qrow' + (on ? " on" : "") + '" data-g="' + g + '" style="--area:' + groupColorVar(g) + '">' +
+        '<button type="button" class="qtoggle" aria-pressed="' + (on ? "true" : "false") + '">' +
+          '<span class="qcheck" aria-hidden="true">' + (on ? "&#10003;" : "") + "</span>" +
+          '<span class="qname">' + esc(name) + "</span></button>" +
+        '<span class="stepper"' + (on ? "" : " hidden") + ">" +
+          '<button type="button" class="stepbtn" data-step="-1" aria-label="Fewer ' + lower + ' sets" aria-disabled="' + (n <= 1) + '">&#8722;</button>' +
+          '<input class="stepval" type="number" inputmode="numeric" min="1" max="50" step="1" value="' + n + '" aria-label="' + esc(name) + ' working sets">' +
+          '<button type="button" class="stepbtn" data-step="1" aria-label="More ' + lower + ' sets" aria-disabled="' + (n >= 50) + '">&#43;</button>' +
+        "</span></li>";
+    }).join("");
+
+    return sheetHead({
+      title: editing ? "Edit gym day" : "Log gym day",
+      sub: esc(prettyDate(quickTs(d.date))),
+      back: true,
+      backLabel: "Cancel"
+    }) +
+      '<div class="sheet-body quickpane" style="--area:var(--accent)">' +
+      "<h4>Day</h4>" +
+      '<div class="chips" role="group" aria-label="Day">' + chip("today", "Today") + chip("yesterday", "Yesterday") + chip("pick", "Pick a day") + "</div>" +
+      (mode === "pick"
+        ? '<label class="visually-hidden" for="quickDate">Day you trained</label>' +
+          '<input type="date" id="quickDate" class="qdate" value="' + esc(d.date) + '" min="2000-01-01" max="' + k.today + '">'
+        : "") +
+      '<h4 id="qgLabel">Working sets per muscle group</h4>' +
+      '<p class="hint qhint">Tap what you trained. Hard sets only, no warm-ups.</p>' +
+      '<ul class="qgroups" aria-labelledby="qgLabel">' + rows + "</ul>" +
+      '<p class="hint qsum" id="quickSum">' + quickSummary() + "</p>" +
+      "<h4>Note (optional)</h4>" +
+      '<textarea id="quickNote" class="lognote" rows="2" maxlength="280" aria-label="Note (optional)" placeholder="Exercises, weights, how it felt">' + esc(d.note || "") + "</textarea>" +
+      (editing ? '<button type="button" class="btn danger wide qdel" id="deleteQuick">Delete this gym day</button>' : "") +
+      "</div>" +
+      '<div class="sheet-foot">' +
+      '<button type="button" class="btn primary wide" id="saveQuick"' + (quickAnyOn() ? "" : " disabled") + ">" +
+      (editing ? "Save changes" : "Save gym day") + "</button></div>";
+  }
+
+  // A view restored without a draft (shouldn't happen) starts a new entry.
+  function openQuickDraftOnly() {
+    quickDraft = { editId: null, date: quickDays().today, pick: false, on: {}, sets: {}, note: "" };
+    MODEL.GROUPS.forEach(function (g) { quickDraft.on[g] = false; quickDraft.sets[g] = QUICK_DEFAULT_SETS; });
+  }
+
+  function readQuickInputs() {
+    var sheet = $("#sheet");
+    sheet.querySelectorAll(".qrow").forEach(function (row) {
+      var g = row.getAttribute("data-g");
+      quickDraft.sets[g] = clampSets($(".stepval", row).value, quickDraft.sets[g]);
+    });
+    var note = $("#quickNote", sheet);
+    if (note) quickDraft.note = note.value;
+  }
+
+  function announce(msg) {
+    var sr = $("#sr-live");
+    if (!sr) return;
+    sr.textContent = "";
+    setTimeout(function () { sr.textContent = msg; }, 50);
+  }
+
+  function wireQuick(sheet) {
+    var saveBtn = $("#saveQuick", sheet);
+    var sum = $("#quickSum", sheet);
+    function paintFoot() {
+      saveBtn.disabled = !quickAnyOn();
+      sum.innerHTML = quickSummary();
+    }
+
+    sheet.querySelectorAll(".qday").forEach(function (b) {
+      b.addEventListener("click", function () {
+        readQuickInputs();
+        var k = quickDays(), m = b.getAttribute("data-day");
+        if (m === "today") { quickDraft.date = k.today; quickDraft.pick = false; }
+        else if (m === "yesterday") { quickDraft.date = k.yesterday; quickDraft.pick = false; }
+        else {
+          quickDraft.pick = true;
+          if (quickDraft.date >= k.yesterday) quickDraft.date = k.before;
+        }
+        renderSheet();
+        var again = $('.qday[data-day="' + m + '"]', $("#sheet"));
+        if (again) again.focus();     // the redraw would otherwise drop focus to the page
+      });
+    });
+
+    // Updated in place: re-rendering would close the iPhone's date picker.
+    var di = $("#quickDate", sheet);
+    if (di) di.addEventListener("change", function () {
+      var v = di.value, today = quickDays().today;
+      if (!DATE_KEY_RE.test(v) || v < "2000-01-01") return;   // half-typed: checked again on save
+      if (v > today) { toast("That day hasn't happened yet"); di.value = quickDraft.date; return; }
+      quickDraft.date = v;
+      var sub = $(".sheet-head .sub", sheet);
+      if (sub) sub.textContent = prettyDate(quickTs(v));
+    });
+
+    sheet.querySelectorAll(".qrow").forEach(function (row) {
+      var g = row.getAttribute("data-g");
+      var tog = $(".qtoggle", row), stepper = $(".stepper", row), inp = $(".stepval", row);
+      var minus = $('[data-step="-1"]', row), plus = $('[data-step="1"]', row);
+      function paintRow() {
+        var on = !!quickDraft.on[g], n = quickDraft.sets[g];
+        row.classList.toggle("on", on);
+        tog.setAttribute("aria-pressed", on ? "true" : "false");
+        $(".qcheck", row).textContent = on ? "✓" : "";
+        stepper.hidden = !on;
+        inp.value = n;
+        // aria-disabled, not disabled: a disabled button would drop keyboard focus.
+        minus.setAttribute("aria-disabled", n <= 1 ? "true" : "false");
+        plus.setAttribute("aria-disabled", n >= 50 ? "true" : "false");
+        paintFoot();
+      }
+      tog.addEventListener("click", function () {
+        quickDraft.sets[g] = clampSets(inp.value, quickDraft.sets[g]);
+        quickDraft.on[g] = !quickDraft.on[g];
+        paintRow();
+      });
+      [minus, plus].forEach(function (b) {
+        b.addEventListener("click", function () {
+          var n = clampSets(inp.value, quickDraft.sets[g]) + Number(b.getAttribute("data-step"));
+          quickDraft.sets[g] = Math.min(50, Math.max(1, n));
+          paintRow();
+          announce(groupName(g) + ": " + quickDraft.sets[g] + (quickDraft.sets[g] === 1 ? " set" : " sets"));
+        });
+      });
+      inp.addEventListener("input", function () {
+        if (inp.value === "") return;                 // still typing
+        quickDraft.sets[g] = clampSets(inp.value, quickDraft.sets[g]);
+        minus.setAttribute("aria-disabled", quickDraft.sets[g] <= 1 ? "true" : "false");
+        plus.setAttribute("aria-disabled", quickDraft.sets[g] >= 50 ? "true" : "false");
+        paintFoot();
+      });
+      inp.addEventListener("change", paintRow);       // on leaving: show the clamped number
+    });
+
+    var note = $("#quickNote", sheet);
+    if (note) note.addEventListener("input", function () { quickDraft.note = note.value; });
+
+    saveBtn.addEventListener("click", saveQuick);
+
+    var del = $("#deleteQuick", sheet);
+    if (del) del.addEventListener("click", function () {
+      if (!confirm("Delete this gym day?")) return;
+      var id = quickDraft.editId;
+      quickDraft = null;
+      deleteLogEntry(id);
+      refresh();
+      goBack();
+      toast(storageOk && !readOnly ? "Gym day deleted" : notSavedMsg());
+    });
+  }
+
+  function saveQuick() {
+    readQuickInputs();
+    var d = quickDraft, groups = {}, any = false;
+    MODEL.GROUPS.forEach(function (g) { if (d.on[g]) { groups[g] = d.sets[g]; any = true; } });
+    if (!any) { toast("Pick at least one muscle group"); return; }
+    // Midnight passed with the sheet open (and no focus event to redraw it):
+    // "Today" on screen is now yesterday. Show that before saving anything.
+    if (d.shown && d.shown !== quickMode(d)) {
+      renderSheet();
+      toast("It's a new day — check the day, then save again");
+      return;
+    }
+    var di = $("#quickDate");
+    var date = (di && d.pick) ? di.value : d.date;
+    if (!DATE_KEY_RE.test(date) || date < "2000-01-01" || date > quickDays().today) {
+      toast("Pick today or an earlier day");
+      return;
+    }
+    d.date = date;
+    var note = String(d.note || "").slice(0, 280);
+    var msg;
+    if (d.editId) {
+      var target = null;
+      state.log.forEach(function (x) { if (x.id === d.editId) target = x; });
+      if (!target) {
+        quickDraft = null; refresh(); goBack();
+        toast("Not saved — that gym day was deleted meanwhile");
+        return;
+      }
+      target.groups = groups;
+      target.note = note;
+      if (dateStr(target.ts) !== d.date) target.ts = quickTs(d.date);   // same day: keep the time
+      target.mts = MODEL.stamp(target.mts);
+      msg = "Gym day updated ✓";
+    } else {
+      // Built through the sanitizer, so it has exactly the stored shape.
+      var entry = MODEL.sanitizeLogEntry({ id: genId(), ts: quickTs(d.date), kind: "quick", groups: groups, note: note, mts: MODEL.stamp(0) });
+      if (!entry) { toast("Couldn't save that gym day"); return; }
+      state.log.push(entry);
+      msg = "Gym day logged ✓";
+    }
+    // A past day (or a changed date) lands mid-log: keep the stored order.
+    MODEL.sortLog(state.log);
+    var savedOk = saveState();
+    quickDraft = null;
+    refresh();
+    goBack();
+    toast(savedOk ? msg : notSavedMsg());
   }
 
   /* ---------- Sheet navigation (in-app stack, no browser history) ---------- */
@@ -1186,6 +1587,7 @@
     var e = null;
     state.log.forEach(function (x) { if (x.id === id) e = x; });
     if (!e) return;
+    if (e.kind === "quick") { openQuick(id); return; }
     if (e.kind) { toast("Editing this entry needs a newer version of the app"); return; }
     var ai = areaIndexById(e.areaId);
     logDraft = { key: "edit:" + id, sets: e.sets.map(String), note: e.note || "", editId: id, variant: e.variant || "" };
@@ -1313,6 +1715,8 @@
     else if (view.t === "session") sheet.innerHTML = sessionPaneHTML();
     else if (view.t === "week") sheet.innerHTML = weekPaneHTML();
     else if (view.t === "library") sheet.innerHTML = libraryPaneHTML();
+    else if (view.t === "quick") sheet.innerHTML = quickPaneHTML();
+    else if (view.t === "volinfo") sheet.innerHTML = volInfoPaneHTML();
     else sheet.innerHTML = settingsPaneHTML();
     wireSheet(view);
     var body = $(".sheet-body", sheet);
@@ -1605,7 +2009,7 @@
 
   function weekPaneHTML() {
     if (!routineOn()) {
-      return sheetHead({ title: "&#128198; This week", sub: "", back: true, backLabel: "Home" }) +
+      return sheetHead({ title: "&#128198; Week plan", sub: "", back: true, backLabel: "Home" }) +
         '<div class="sheet-body"><p class="empty">No routine set up yet.<br>Choose 2, 3 or 6 days a week in Settings and your plan appears here.</p></div>';
     }
     var sessions = routineSessions();
@@ -1643,7 +2047,7 @@
         "</div>";
     }).join("");
 
-    return sheetHead({ title: "&#128198; This week", sub: "", back: true, backLabel: "Home" }) +
+    return sheetHead({ title: "&#128198; Week plan", sub: "", back: true, backLabel: "Home" }) +
       '<div class="sheet-body week">' +
       "<p>Your " + sessions.length + "-day rotation. It advances when you finish a session, so rest days are yours to take whenever you like.</p>" +
       '<div class="wkdays">' + days + "</div>" +
@@ -1677,9 +2081,9 @@
 
   function fmtKg(x) { return String(Math.round(x * 100) / 100); }
 
-  // One row in History or a day's list. Calisthenics sessions open the log
-  // form; gym, quick-log and weigh-in entries (from newer versions of the
-  // app) are shown and can be deleted, but not edited here.
+  // One row in History or a day's list. Skill sessions open the log form and
+  // gym days the gym-day sheet; gym-exercise and weigh-in entries (from newer
+  // versions of the app) are shown and can be deleted, but not edited here.
   function entryRowHTML(e) {
     var color, name, detail;
     if (!e.kind) {
@@ -1693,9 +2097,14 @@
       name = "&#127947;&#65039; " + esc(e.exId);
       detail = esc(e.sets.map(function (r, i) { return r + (e.kg[i] ? " × " + fmtKg(e.kg[i]) + " kg" : ""); }).join(", "));
     } else if (e.kind === "quick") {
-      color = "var(--axis)";
-      name = "&#9889; Quick log";
-      detail = esc(Object.keys(e.groups).map(function (g) { return g + " " + e.groups[g]; }).join(" · ") + " sets");
+      // "13 sets: Chest 4, Back 3, Arms 6" (commas, so the " · note" after it
+      // stays apart), swatch in the biggest group's colour.
+      var gs = MODEL.GROUPS.filter(function (g) { return e.groups[g] > 0; });
+      var total = 0, top = null;
+      gs.forEach(function (g) { total += e.groups[g]; if (!top || e.groups[g] > e.groups[top]) top = g; });
+      color = top ? groupColorVar(top) : "var(--axis)";
+      name = "&#127947;&#65039; Gym day";
+      detail = esc(total + (total === 1 ? " set: " : " sets: ") + gs.map(function (g) { return groupName(g) + " " + e.groups[g]; }).join(", "));
     } else if (e.kind === "body") {
       color = "var(--axis)";
       name = "&#9878;&#65039; Weigh-in";
@@ -1719,7 +2128,7 @@
     var sessions = allSessionsSorted();
     var body;
     if (!sessions.length) {
-      body = '<p class="empty">No sessions logged yet.<br>Open an exercise and tap &ldquo;Log a session&rdquo; to start your history.</p>';
+      body = '<p class="empty">No sessions logged yet.<br>Open an exercise and tap &ldquo;Log a session&rdquo;, or use &ldquo;&#65291; Log gym day&rdquo; on the home screen.</p>';
     } else {
       // Group and label from the same source (the timestamp, in the viewer's
       // timezone) so a header can never disagree with its group's contents.
@@ -1798,6 +2207,14 @@
 
   function heatmapSVG() {
     var counts = trainingDaySet();
+    // Shade by how much was trained: a gym day logged as one entry counts
+    // one per muscle group, like the separate skill sessions it resembles.
+    var units = {};
+    state.log.forEach(function (e) {
+      if (!isTraining(e)) return;
+      var k = dateStr(e.ts);
+      units[k] = (units[k] || 0) + (e.kind === "quick" ? Math.max(1, Object.keys(e.groups).length) : 1);
+    });
     var weeks = 26, cell = 13, size = 10;
     var today = startOfDay(nowMs());
     var startOfWeek = addDays(today, -today.getDay());
@@ -1813,7 +2230,8 @@
         if (day.getTime() > today.getTime()) continue;
         var key = dateStr(day.getTime());
         var c = counts[key] || 0;
-        var lvl = c === 0 ? 0 : (c >= 4 ? 4 : c);
+        var u = units[key] || 0;
+        var lvl = c === 0 ? 0 : (u >= 4 ? 4 : u);
         var fillAttr = c === 0
           ? 'fill="var(--grid)"'
           : 'fill="var(--good)" fill-opacity="' + OPACITY[lvl] + '"';
@@ -1845,7 +2263,7 @@
 
   function statsPaneHTML() {
     var cur = currentStreak(), lng = longestStreak();
-    var totalSessions = state.log.length;
+    var totalSessions = state.log.filter(isTraining).length;
     var daysTrained = Object.keys(trainingDaySet()).length;
     var cards = '<div class="statcards">' +
       statCard(cur, "day streak") +
@@ -1981,6 +2399,9 @@
       '<div class="btnrow">' +
       (syncCfg ? '<button class="btn danger" id="syncOffBtn">Turn off sync here</button>' : "") +
       '<button class="btn danger" id="resetBtn">Reset all progress</button></div>' +
+      "<h5>About Milo</h5>" +
+      "<p>Milo of Croton, a wrestler in ancient Greece, is said to have lifted a newborn calf onto his shoulders and carried it every day. The calf grew a little each day, and so did his strength &#8212; until he was carrying a full-grown bull.</p>" +
+      "<p>That&#8217;s the idea here: a little more than last time, and a record so you can see it add up.</p>" +
       '<p class="hint buildline">Build ' + esc(BUILD) + " &middot; data v" + esc(String(state.v)) + "</p>" +
       "</div></details>" +
       "</div>";
@@ -2190,6 +2611,8 @@
       });
     }
 
+    if (view.t === "quick") wireQuick(sheet);
+
     if (view.t === "library") {
       sheet.querySelectorAll(".librow").forEach(function (b) {
         b.addEventListener("click", function () { openArea(Number(b.getAttribute("data-area"))); });
@@ -2291,11 +2714,11 @@
       $("#downloadBtn", sheet).addEventListener("click", downloadBackup);
       var preCopy = $("#preCopyBtn", sheet);
       if (preCopy) preCopy.addEventListener("click", function () {
-        saveTextFile(sideCopy(PRE_UPDATE_KEY) || "", "bigsix-before-update-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
+        saveTextFile(sideCopy(PRE_UPDATE_KEY) || "", "milo-before-update-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
       });
       var recoverCopy = $("#recoverCopyBtn", sheet);
       if (recoverCopy) recoverCopy.addEventListener("click", function () {
-        saveTextFile(sideCopy(RECOVER_KEY) || "", "bigsix-unreadable-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
+        saveTextFile(sideCopy(RECOVER_KEY) || "", "milo-unreadable-" + dateStr(nowMs()) + ".json", "Copy saved ✓");
       });
       $("#restoreBtn", sheet).addEventListener("click", function () { $("#restoreFile", sheet).click(); });
       $("#restoreFile", sheet).addEventListener("change", function () {
@@ -2446,7 +2869,8 @@
 
   function logPaneOpen() {
     var top = uiStack[uiStack.length - 1];
-    return !!top && top.t === "log";
+    // Also the quick sheet: a sync must not re-render a form mid-entry.
+    return !!top && (top.t === "log" || top.t === "quick");
   }
 
   // Every change goes through saveState(), so that is the only place this needs

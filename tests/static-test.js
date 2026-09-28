@@ -34,9 +34,15 @@ scripts.forEach(s => check("script is precached: " + s, ASSETS.indexOf(s) !== -1
 const manifest = JSON.parse(read("manifest.webmanifest"));
 (manifest.icons || []).forEach(i => check("manifest icon is precached: " + i.src, ASSETS.indexOf(i.src) !== -1));
 
+// The install only accepts a download when every stamped file says VERSION;
+// a script missing from STAMPED could be cached from the wrong release.
+const stampedBlock = (sw.match(/var STAMPED = \[([\s\S]*?)\];/) || [])[1] || "";
+const STAMPED = (stampedBlock.match(/"([^"]+)"/g) || []).map(s => s.slice(1, -1));
+scripts.forEach(s => check("script's stamp is checked at install: " + s, STAMPED.indexOf(s) !== -1));
+
 section("script order");
-const order = ["data.js", "model.js", "sync.js", "app.js"];
-check("data.js, model.js, sync.js, app.js load in that order",
+const order = ["data.js", "model.js", "training.js", "sync.js", "app.js"];
+check(order.join(", ") + " load in that order",
   order.every(s => scripts.indexOf(s) !== -1) &&
   order.every((s, i) => i === 0 || scripts.indexOf(order[i - 1]) < scripts.indexOf(s)));
 check("app.js loads last", scripts[scripts.length - 1] === "app.js");
@@ -46,6 +52,7 @@ const stamps = {
   "index.html": (html.match(/<html [^>]*data-build="([^"]+)"/) || [])[1],
   "data.js": (read("data.js").match(/^const DATA_BUILD = "([^"]+)";/m) || [])[1],
   "model.js": (read("model.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
+  "training.js": (read("training.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
   "qrcode.js": (read("qrcode.js").match(/BUILD: "([^"]+)"/) || [])[1],
   "sync.js": (read("sync.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1],
   "app.js": (read("app.js").match(/^  var BUILD = "([^"]+)";/m) || [])[1]

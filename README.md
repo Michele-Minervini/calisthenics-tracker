@@ -1,13 +1,24 @@
-# Big Six Tracker
+# Milo
 
-A tiny personal web app to track progress through six fundamental bodyweight
-movements — Pushups, Squats, Pullups, Leg Raises, Bridges and Handstand
-Pushups — each organized as a ladder of ten progressively harder steps.
+A tiny personal web app for strength training, named after Milo of Croton —
+the wrestler who carried a calf every day until it was a bull. It tracks gym
+days and six bodyweight skill ladders (Pushups, Squats, Pullups, Leg Raises,
+Bridges and Handstand Pushups, ten progressively harder steps each), and
+counts both in hard sets for six muscle groups: chest, back, shoulders, arms,
+abs and legs.
 
 **Live app:** https://michele-minervini.github.io/calisthenics-tracker/
 
 ## What it does
 
+- **This week, by muscle group.** The home screen shows six bars — hard sets
+  this week (Monday to Sunday) for chest, back, shoulders, arms, abs and legs —
+  against a weekly target of 10–20 sets (20–40 for arms and legs, which are
+  several muscles each). Skill sessions count too: a set of push-ups is one set
+  for chest and half a set for arms and shoulders. The ⓘ explains the counting.
+- **Log a gym day.** "＋ Log gym day" records the working sets you did for each
+  muscle group (today, yesterday or any earlier day), with a note. Tap it in
+  History to change or delete it.
 - A six-axis radar ("star") chart, ten rings deep — one glance shows your
   current step in every area.
 - Tap an area name (chart or card) for its ten-step ladder; tap a colored dot
@@ -39,7 +50,7 @@ Pushups — each organized as a ladder of ten progressively harder steps.
   logged, but they can't award a standard you didn't earn.
 - **Exercise library.** Every area's ten steps in one list, each with what it
   trains and the reps and sets for all three standards.
-- **This week.** The whole rotation at a glance, plus what each area needs next
+- **Week plan.** The whole rotation at a glance, plus what each area needs next
   and the rungs beyond it.
 - **Ghost radar.** Toggle "Show where I started" to see your past shape behind
   today's. Settings can re-zero that line to today — handy at the start of a new
@@ -59,9 +70,10 @@ Pushups — each organized as a ladder of ten progressively harder steps.
 |------|------|
 | `index.html` | The page skeleton |
 | `style.css` | All styling (light + dark theme) |
-| `data.js` | The content: 60 exercises with rep goals, 38 variations, warm-ups |
+| `data.js` | The content: 60 exercises with rep goals, 38 variations, warm-ups, and which muscle groups each one works |
 | `app.js` | The logic: radar, navigation, logging, stats, saving/loading |
 | `model.js` | The data rules: what a saved state looks like, how it's cleaned on load, how two devices merge |
+| `training.js` | The training rules: weeks, hard sets per muscle group, weekly targets |
 | `qrcode.js` | Self-contained QR-code generator (no dependencies) |
 | `sync.js` | Optional cloud sync: talks to your database |
 | `tests/` | Automated checks — run with `sh tests/run.sh` (see below) |
@@ -183,7 +195,7 @@ Every release gets a new build number: one higher than the current one (the
 forget). Four steps:
 
 ```bash
-sh tools/set-build.sh bigsix-v17
+sh tools/set-build.sh milo-v19
 ```
 
 ```bash

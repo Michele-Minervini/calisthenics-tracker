@@ -340,5 +340,5 @@ var QR = (function () {
   }
 
   // Build stamp: app.js refuses to run on files from two different releases.
-  return { generate: generate, BUILD: "bigsix-v17" };
+  return { generate: generate, BUILD: "milo-v18" };
 })();

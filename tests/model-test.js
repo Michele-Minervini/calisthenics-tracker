@@ -127,6 +127,18 @@ section("quick logs and weigh-ins");
   check("an unknown kind → dropped", S({ areas: {}, log: [{ id: "r", ts: 1, kind: "run", sets: [5] }] }).log.length === 0);
 }
 
+section("entry kinds");
+{
+  check("a skill session is bodyweight and training", M.isBodyweight({ areaId: "pushup" }) && M.isTraining({ areaId: "pushup" }));
+  check("a gym day and a gym exercise are training, not bodyweight",
+    M.isTraining({ kind: "quick" }) && M.isTraining({ kind: "gym" }) && !M.isBodyweight({ kind: "quick" }));
+  check("a weigh-in isn't training", !M.isTraining({ kind: "body" }) && !M.isBodyweight({ kind: "body" }));
+  check("nothing isn't anything", !M.isTraining(null) && !M.isBodyweight(undefined));
+  const q = M.sanitizeLogEntry({ id: "q1", ts: 5, kind: "quick", groups: { legs: 3, chest: 4 }, note: "x", mts: 6 });
+  check("a gym day built the way the app builds it comes out in the stored shape",
+    same(Object.keys(q), ["id", "ts", "kind", "groups", "note", "mts"]) && same(Object.keys(q.groups), ["chest", "legs"]));
+}
+
 section("one entry per id, deletes applied");
 {
   const s = S({ areas: {}, log: [
