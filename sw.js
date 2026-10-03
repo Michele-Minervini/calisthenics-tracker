@@ -1,136 +1,64 @@
-/* Milo — service worker.
-   Strategy: the whole app is downloaded into one cache when a new version
-   installs, checked, and served from that cache — so every launch runs one
-   consistent release, online or offline.
+/* Switches off the old copy of Milo at /calisthenics-tracker/.
 
-   Updates arrive ONLY through a VERSION bump: nothing is re-cached in the
-   background. (The old background refresh wrote new files into the running
-   version's cache, which could leave a mix of two releases — and a blank app
-   offline.) Set VERSION with `sh tools/set-build.sh <build>`, which also
-   updates the matching stamp in every script; tests/static-test.js checks
-   they agree. */
+   Milo moved to https://michele-minervini.github.io/milo/. Every copy of the
+   app installed from this old address has a service worker that keeps serving
+   the old app from its offline copy. On its next update check it downloads
+   this file instead, which:
+   - deletes the old app's offline copy at this path (never the saved data,
+     and never another app's cache: the new /milo/ one ends in "@/milo/");
+   - removes itself;
+   - after a short grace period (so the old app can finish its last sync),
+     reloads the open pages, which then load index.html from the network —
+     the "Milo has moved" page.
 
-var VERSION = "milo-v20";
-var ASSETS = [
-  ".",
-  "index.html",
-  "style.css",
-  "app.js",
-  "data.js",
-  "model.js",
-  "training.js",
-  "radar.js",
-  "qrcode.js",
-  "sync.js",
-  "manifest.webmanifest",
-  "icons/icon-192.png",
-  "icons/icon-512.png",
-  "icons/maskable-512.png",
-  "icons/apple-touch-icon.png"
-];
+   It has no fetch handler, so nothing is ever served from here again.
+   Keep this file online for as long as any old copy might still be opened. */
 
-// Files that carry the release stamp. A download is only accepted when every
-// one of them really belongs to VERSION — GitHub's CDN can briefly keep
-// serving an old copy of a file after a deploy, and caching that would pin a
-// mixed release on the phone until the next one.
-var STAMPED = [".", "index.html", "app.js", "data.js", "model.js", "training.js", "radar.js", "qrcode.js", "sync.js"];
+var SUFFIX = "@" + new URL(self.registration.scope).pathname;   // "@/calisthenics-tracker/"
 
-// Cache Storage is shared by every app on the origin (all of
-// michele-minervini.github.io), not just this folder. Cache names therefore
-// carry the path this worker controls, and cleanup only touches caches of
-// that same path — so two apps (or the old and new address of this one)
-// can't delete each other's offline copy.
-var SCOPE = self.registration.scope;
-var SCOPE_PATH = new URL(SCOPE).pathname;
-var SUFFIX = "@" + SCOPE_PATH;
-var CACHE = VERSION + SUFFIX;
-
-// Before build stamps, caches were named plainly "bigsix-vN". Only the app at
-// this path ever created those, so only this path cleans them up.
-var LEGACY_PATH = "/calisthenics-tracker/";
-
-function ownedOldCache(name) {
-  if (name === CACHE) return false;
-  if (name.slice(-SUFFIX.length) === SUFFIX) return true;   // an older version at this path
-  return SCOPE_PATH === LEGACY_PATH && /^bigsix-v\d+$/.test(name);
+// Caches the old app made here: "milo-vN@/calisthenics-tracker/" and, from
+// before cache names carried their path, "bigsix-vN".
+function oldCache(name) {
+  return name.slice(-SUFFIX.length) === SUFFIX || /^bigsix-v\d+$/.test(name);
 }
 
-var ASSET_URLS = ASSETS.map(function (p) { return new URL(p, SCOPE).href; });
-
-// Asks for the file under a URL the CDN has never seen, so it can't answer
-// from its own cache, and skips the browser's HTTP cache too.
-function fetchFresh(path) {
-  var url = new URL(path, SCOPE);
-  url.searchParams.set("build", VERSION);
-  return fetch(url.href, { cache: "reload" }).then(function (res) {
-    if (!res.ok) throw new Error(path + ": HTTP " + res.status);
-    // Safari refuses to serve a page response that went through a redirect.
-    if (!res.redirected) return res;
-    return res.blob().then(function (body) {
-      return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
-    });
-  });
-}
-
-// Download the whole release, check the stamps, and only then store it. If
-// anything fails, nothing of this attempt is kept, and the browser tries again
-// on a later launch — while the previous release keeps working.
-function precache() {
-  return Promise.all(ASSETS.map(function (path) {
-    return fetchFresh(path).then(function (res) {
-      if (STAMPED.indexOf(path) === -1) return { path: path, res: res };
-      return res.clone().text().then(function (text) {
-        if (text.indexOf('"' + VERSION + '"') === -1) throw new Error(path + " is not " + VERSION);
-        return { path: path, res: res };
-      });
-    });
-  })).then(function (items) {
-    return caches.open(CACHE).then(function (cache) {
-      return Promise.all(items.map(function (it) {
-        return cache.put(new URL(it.path, SCOPE).href, it.res);
-      }));
-    });
-  }).catch(function (err) {
-    return caches.delete(CACHE).then(function () { throw err; });
-  });
-}
-
-// If this release's cache disappears (another app on the origin clearing
-// caches, or the browser reclaiming space), fetch it again the next time a
-// file is missing — otherwise the app would stay online-only until the next
-// release. One repair at a time.
-var repairing = null;
-function repair() {
-  if (!repairing) {
-    repairing = precache().catch(function () { /* try again next time */ })
-      .then(function () { repairing = null; });
-  }
-  return repairing;
-}
-
+// Before anything is switched off, make sure the "Milo has moved" page can be
+// reached (this also leaves it in the browser's cache). If it can't, the
+// install fails and the old app keeps working; the browser tries again later.
 self.addEventListener("install", function (e) {
-  e.waitUntil(precache().then(function () { return self.skipWaiting(); }));
-});
-
-self.addEventListener("activate", function (e) {
   e.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(keys.filter(ownedOldCache).map(function (k) { return caches.delete(k); }));
-    }).then(function () { return self.clients.claim(); })
+    fetch(new URL("./?moved=1", self.registration.scope).href, { cache: "reload" }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return self.skipWaiting();
+    })
   );
 });
 
-self.addEventListener("fetch", function (e) {
-  var req = e.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
-  e.respondWith(
-    caches.open(CACHE).then(function (cache) {
-      return cache.match(req, { ignoreSearch: req.mode === "navigate" }).then(function (cached) {
-        if (cached) return cached;
-        var bare = req.url.split("#")[0].split("?")[0];
-        if (req.mode === "navigate" || ASSET_URLS.indexOf(bare) !== -1) e.waitUntil(repair());
-        return fetch(req);
-      });
-    })
+// How long the open old app keeps running before it is reloaded: enough for
+// the sync it starts when it opens to send its last changes to the cloud.
+// (Its sync requests don't pass through here, so they aren't held up.)
+var GRACE_MS = 12000;
+
+self.addEventListener("activate", function (e) {
+  e.waitUntil(
+    caches.keys()
+      .then(function (keys) { return Promise.all(keys.filter(oldCache).map(function (k) { return caches.delete(k); })); })
+      .catch(function () { /* the moved page cleans up again */ })
+      .then(function () { return self.clients.claim(); })
+      // Removed first: if the browser stops this worker during the wait, the
+      // next launch still loads the moved page.
+      .then(function () { return self.registration.unregister(); })
+      .then(function () { return new Promise(function (r) { setTimeout(r, GRACE_MS); }); })
+      .then(function () { return self.clients.matchAll({ type: "window" }); })
+      .then(function (wins) {
+        return Promise.all(wins.map(function (c) {
+          // A different address from the current one, so it is a real
+          // reload even when the old page's address ends in a #fragment.
+          var u = new URL(c.url);
+          u.searchParams.set("moved", "1");
+          return c.navigate(u.href).catch(function () { /* the next launch shows the page anyway */ });
+        }));
+      })
+      .catch(function () { /* nothing more to do */ })
   );
 });
